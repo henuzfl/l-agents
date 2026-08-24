@@ -2,7 +2,13 @@
 
 const STORAGE_KEY = "agent-desk-conversations";
 const USER_ID = "web-user";
-const state = { conversations: [], activeId: "", sending: false };
+const state = {
+  conversations: [],
+  activeId: "",
+  sending: false,
+  activeRequest: null,
+  clock: null,
+};
 
 const elements = {
   conversation: document.querySelector("#conversation"),
@@ -111,7 +117,37 @@ function renderMarkdown(value) {
   return output.join("");
 }
 
+function formatDuration(milliseconds) {
+  const seconds = Math.max(0, milliseconds || 0) / 1000;
+  return seconds < 10 ? `${seconds.toFixed(1)} 秒` : `${Math.round(seconds)} 秒`;
+}
+
+function traceHtml(message) {
+  if (!message.traceStatus && !message.trace?.length) return "";
+  const running = message.traceStatus === "running";
+  const interrupted = message.traceStatus === "interrupted";
+  const duration = running
+    ? Date.now() - (message.startedAt || Date.now())
+    : message.durationMs || 0;
+  const title = running ? "正在思考" : interrupted ? "执行中断" : "已思考";
+  const count = message.trace?.length || 0;
+  const open = message.traceOpen === true || running ? " open" : "";
+  const steps = (message.trace || []).map((step) => {
+    const meta = [step.agent, step.tool].filter(Boolean).map(escapeHtml).join(" · ");
+    return `<li class="trace-step ${escapeHtml(step.status || "completed")}">
+      <div><span>${escapeHtml(step.label || "执行步骤")}</span><time>+${formatDuration(step.elapsed_ms)}</time></div>
+      ${meta ? `<code>${meta}</code>` : ""}
+    </li>`;
+  }).join("");
+  const pulse = running ? '<i class="trace-pulse" aria-hidden="true"></i>' : "";
+  return `<details class="trace-panel ${message.traceStatus}" data-trace-id="${message.id}"${open}>
+    <summary>${pulse}<span>${title} ${formatDuration(duration)}</span><small>${count} 步</small><b aria-hidden="true">⌄</b></summary>
+    <ol class="trace-steps">${steps}</ol>
+  </details>`;
+}
+
 function createConversation() {
+  cancelActiveRequest();
   const conversation = { id: id(), title: "新对话", messages: [] };
   state.conversations.unshift(conversation);
   state.activeId = conversation.id;
@@ -122,6 +158,7 @@ function createConversation() {
 }
 
 function selectConversation(conversationId) {
+  if (conversationId !== state.activeId) cancelActiveRequest();
   state.activeId = conversationId;
   closeSidebar();
   clearError();
@@ -129,6 +166,7 @@ function selectConversation(conversationId) {
 }
 
 function deleteConversation(conversationId) {
+  if (conversationId === state.activeRequest?.conversationId) cancelActiveRequest();
   state.conversations = state.conversations.filter((item) => item.id !== conversationId);
   if (state.activeId === conversationId) state.activeId = state.conversations[0]?.id || "";
   save();
@@ -149,7 +187,7 @@ function messageHtml(message) {
   const content = message.role === "assistant"
     ? `<div class="markdown-body">${renderMarkdown(message.content)}</div>`
     : `<p>${escapeHtml(message.content)}</p>`;
-  return `<article class="message ${message.role}">${badge}<div class="message-body"><div class="message-label">${label}</div>${content}</div></article>`;
+  return `<article class="message ${message.role}">${badge}<div class="message-body"><div class="message-label">${label}</div>${traceHtml(message)}${content}</div></article>`;
 }
 
 function renderConversation() {
@@ -157,8 +195,7 @@ function renderConversation() {
   if (!conversation?.messages.length) {
     elements.conversation.innerHTML = document.querySelector("#welcomeTemplate").innerHTML;
   } else {
-    const pending = state.sending ? '<article class="message assistant"><div class="assistant-badge"><i></i><i></i><i></i><i></i></div><div class="message-body"><div class="message-label">Manager</div><div class="typing"><span></span><span></span><span></span></div></div></article>' : "";
-    elements.conversation.innerHTML = `<div class="message-list">${conversation.messages.map(messageHtml).join("")}${pending}</div>`;
+    elements.conversation.innerHTML = `<div class="message-list">${conversation.messages.map(messageHtml).join("")}</div>`;
   }
   requestAnimationFrame(() => elements.conversation.scrollTo({ top: elements.conversation.scrollHeight, behavior: "smooth" }));
 }
@@ -167,6 +204,97 @@ function render() { renderHistory(); renderConversation(); }
 function clearError() { elements.error.hidden = true; elements.errorText.textContent = ""; }
 function showError(message) { elements.errorText.textContent = message; elements.error.hidden = false; }
 function closeSidebar() { elements.sidebar.classList.remove("open"); elements.scrim.hidden = true; }
+
+function startClock() {
+  clearInterval(state.clock);
+  state.clock = setInterval(() => {
+    if (state.sending) renderConversation(); else clearInterval(state.clock);
+  }, 500);
+}
+
+function cancelActiveRequest() {
+  const request = state.activeRequest;
+  if (!request) return;
+  request.intentional = true;
+  request.controller.abort();
+  if (request.message.traceStatus === "running") {
+    request.message.traceStatus = "interrupted";
+    request.message.traceOpen = false;
+    request.message.durationMs = Date.now() - request.message.startedAt;
+    request.message.trace.push({
+      sequence: request.message.trace.length + 1,
+      status: "interrupted",
+      label: "请求已取消",
+      agent: "manager",
+      tool: null,
+      elapsed_ms: request.message.durationMs,
+    });
+  }
+  state.activeRequest = null;
+  state.sending = false;
+  clearInterval(state.clock);
+  save();
+}
+
+function applyStreamEvent(message, eventName, payload) {
+  if (eventName === "start") {
+    message.runId = payload.run_id;
+    return;
+  }
+  if (eventName === "trace") {
+    message.trace.push({
+      sequence: payload.sequence,
+      status: payload.status,
+      label: payload.label,
+      agent: payload.agent,
+      tool: payload.tool,
+      elapsed_ms: payload.elapsed_ms,
+    });
+    return;
+  }
+  if (eventName === "delta") {
+    message.content += payload.text || "";
+    return;
+  }
+  if (eventName === "done") {
+    message.content = payload.answer || message.content;
+    message.durationMs = payload.duration_ms || 0;
+    message.traceStatus = "completed";
+    message.traceOpen = false;
+    return;
+  }
+  if (eventName === "error") {
+    message.durationMs = payload.duration_ms || Date.now() - message.startedAt;
+    message.traceStatus = "interrupted";
+    message.traceOpen = true;
+    throw new Error(payload.message || "执行过程已中断，请重试。");
+  }
+}
+
+async function consumeEventStream(response, onEvent) {
+  if (!response.body) throw new Error("浏览器不支持流式响应。");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() || "";
+    blocks.forEach((block) => {
+      if (!block || block.startsWith(":")) return;
+      let eventName = "message";
+      const data = [];
+      block.split("\n").forEach((line) => {
+        if (line.startsWith("event:")) eventName = line.slice(6).trim();
+        if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      });
+      if (data.length) onEvent(eventName, JSON.parse(data.join("\n")));
+    });
+    if (done) break;
+  }
+}
 
 async function sendMessage(prefill) {
   const content = (prefill || elements.input.value).trim();
@@ -177,26 +305,59 @@ async function sendMessage(prefill) {
   elements.send.disabled = true;
   conversation.messages.push({ id: id(), role: "user", content });
   if (conversation.title === "新对话") conversation.title = content.slice(0, 24);
+  const assistant = {
+    id: id(),
+    role: "assistant",
+    content: "",
+    trace: [],
+    traceStatus: "running",
+    traceOpen: true,
+    durationMs: 0,
+    startedAt: Date.now(),
+  };
+  conversation.messages.push(assistant);
+  const controller = new AbortController();
+  const activeRequest = { controller, conversationId: conversation.id, message: assistant, intentional: false };
+  state.activeRequest = activeRequest;
   state.sending = true;
+  startClock();
   save();
   render();
 
   try {
-    const response = await fetch("/api/v1/chat", {
+    const response = await fetch("/api/v1/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: USER_ID, conversation_id: conversation.id, message: content }),
+      signal: controller.signal,
     });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error?.message || "请求未完成，请检查模型配置后重试。");
-    conversation.messages.push({ id: id(), role: "assistant", content: payload.answer });
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.error?.message || "请求未完成，请检查模型配置后重试。");
+    }
+    await consumeEventStream(response, (eventName, payload) => {
+      applyStreamEvent(assistant, eventName, payload);
+      save();
+      if (state.activeId === conversation.id) renderConversation();
+    });
+    if (assistant.traceStatus === "running") throw new Error("流式连接提前结束，请重试。");
     save();
   } catch (error) {
-    showError(error instanceof Error ? error.message : "网络连接失败，请稍后重试。");
+    if (!activeRequest.intentional) {
+      assistant.traceStatus = "interrupted";
+      assistant.traceOpen = true;
+      assistant.durationMs ||= Date.now() - assistant.startedAt;
+      showError(error instanceof Error ? error.message : "网络连接失败，请稍后重试。");
+      save();
+    }
   } finally {
-    state.sending = false;
-    render();
-    elements.input.focus();
+    if (state.activeRequest === activeRequest) {
+      state.activeRequest = null;
+      state.sending = false;
+      clearInterval(state.clock);
+      render();
+      elements.input.focus();
+    }
   }
 }
 
@@ -218,10 +379,24 @@ elements.conversation.addEventListener("click", (event) => {
   const suggestion = event.target.closest("[data-message]");
   if (suggestion) sendMessage(suggestion.dataset.message);
 });
+elements.conversation.addEventListener("toggle", (event) => {
+  const panel = event.target.closest?.("[data-trace-id]");
+  if (!panel) return;
+  for (const conversation of state.conversations) {
+    const message = conversation.messages.find((item) => item.id === panel.dataset.traceId);
+    if (message) { message.traceOpen = panel.open; save(); break; }
+  }
+}, true);
 document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); createConversation(); }
 });
 
 try { state.conversations = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { state.conversations = []; }
+state.conversations.forEach((conversation) => conversation.messages.forEach((message) => {
+  if (message.traceStatus === "running") {
+    message.traceStatus = "interrupted";
+    message.traceOpen = false;
+  }
+}));
 if (state.conversations[0]) state.activeId = state.conversations[0].id; else createConversation();
 render();

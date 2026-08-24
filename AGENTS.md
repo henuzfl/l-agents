@@ -4,7 +4,7 @@
 
 Application code lives under `app/`. `app/main.py` creates the FastAPI application, while `app/container.py` wires settings, agents, sessions, and services. HTTP routes and exception handling are in `app/api/`; request and response models are in `app/schemas/`. Core configuration, logging, and application exceptions belong in `app/core/`.
 
-Agent implementations are isolated in `app/agents/manager/` and `app/agents/agent1/` through `agent4/`. Keep each child agent’s factory and prompt in its own directory. Short-term SQLite memory is implemented in `app/memory/`, and orchestration belongs in `app/services/`.
+Agent implementations are isolated in `app/agents/manager/`, `app/agents/knowledge_agent/`, and `app/agents/agent2/` through `agent4/`. Keep each child agent’s factory and prompt in its own directory. Short-term SQLite memory is implemented in `app/memory/`, and orchestration belongs in `app/services/`.
 
 The server-rendered UI uses `app/templates/chat.html` with assets in `app/static/`. Tests are split into `tests/unit/` and `tests/integration/`.
 
@@ -22,7 +22,7 @@ The server-rendered UI uses `app/templates/chat.html` with assets in `app/static
 
 Use Python 3.11+ syntax, four-space indentation, complete type annotations, and `async`/`await` for I/O. Ruff enforces a 100-character line limit and the `E`, `F`, `I`, `UP`, `B`, and `ASYNC` rule sets.
 
-Use `snake_case` for modules, functions, and variables; `PascalCase` for classes. Preserve the established names `manager`, `agent1`–`agent4`, `create_agent1()`–`create_agent4()`, and `run_agent1`–`run_agent4`.
+Use `snake_case` for modules, functions, and variables; `PascalCase` for classes. Preserve the established names `manager`, `knowledge_agent`, `agent2`–`agent4`, `create_knowledge_agent()`, and `run_knowledge_agent`.
 
 ## Testing Guidelines
 
@@ -30,7 +30,7 @@ Use pytest and pytest-asyncio. Name files `test_*.py` and tests `test_<behavior>
 
 ## Architecture & Security Constraints
 
-Only the Manager receives a Session. Child agents must remain stateless and must not access Manager history. Only agent1 may register the internal `search_knowledge_base` tool; agent2–agent4 remain tool-free. Keep API keys and database URLs in `.env`; never commit secrets, SQLite data, traces, or raw model requests.
+Only the Manager receives a Session. Child agents must remain stateless and must not access Manager history. Only `knowledge_agent` may register the internal `search_knowledge_base` tool; agent2–agent4 remain tool-free. Keep API keys and database URLs in `.env`; never commit secrets, SQLite data, traces, or raw model requests.
 
 ## Commit & Pull Request Guidelines
 

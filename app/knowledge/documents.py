@@ -8,7 +8,7 @@ PROJECT_MANUAL_SECTIONS: tuple[tuple[str, str], ...] = (
     (
         "项目定位",
         "Enterprise Agent 是基于 FastAPI、OpenAI Agents SDK 和 DeepSeek 的多 Agent 骨架。"
-        "系统由一个 Manager 和 agent1 至 agent4 四个子 Agent 组成。Manager 负责理解请求、"
+        "系统由一个 Manager、knowledge_agent 与 agent2 至 agent4 组成。Manager 负责理解请求、"
         "调用子 Agent 并生成最终回答。",
     ),
     (
@@ -19,8 +19,9 @@ PROJECT_MANUAL_SECTIONS: tuple[tuple[str, str], ...] = (
     ),
     (
         "知识库检索",
-        "agent1 是项目知识检索 Agent。Manager 遇到项目架构、配置、运行或使用方式的问题时"
-        "调用 agent1。agent1 通过 search_knowledge_base 工具检索 pgvector 中的项目手册证据，"
+        "knowledge_agent 是项目知识检索 Agent。Manager 遇到项目架构、配置、运行或使用方式的"
+        "问题时调用 knowledge_agent。knowledge_agent 通过 search_knowledge_base 工具检索"
+        "pgvector 中的项目手册证据，"
         "并在回答中标注来源。知识库不提供公开检索接口。",
     ),
     (

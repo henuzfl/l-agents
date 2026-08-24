@@ -1,11 +1,11 @@
 # Enterprise Agent
 
-一个基于 FastAPI、OpenAI Agents SDK、DeepSeek 与 LlamaIndex 的多 Agent 骨架。Manager 拥有短期会话记忆，agent1 通过 pgvector 检索项目知识，agent2—agent4 保持固定回复。
+一个基于 FastAPI、OpenAI Agents SDK、DeepSeek 与 LlamaIndex 的多 Agent 骨架。Manager 拥有短期会话记忆，`knowledge_agent` 通过 pgvector 检索项目知识，agent2—agent4 保持固定回复。
 
 ```mermaid
 flowchart TD
     API[FastAPI] --> M[manager / SQLite Session]
-    M -->|run_agent1| A1[agent1 / stateless RAG]
+    M -->|run_knowledge_agent| A1[knowledge_agent / stateless RAG]
     M -->|run_agent2| A2[agent2 / stateless]
     M -->|run_agent3| A3[agent3 / stateless]
     M -->|run_agent4| A4[agent4 / stateless]
@@ -13,17 +13,17 @@ flowchart TD
 
 ## 设计
 
-`manager` 负责理解用户请求、调用对应工具并形成最终回答。agent1 是无状态项目知识检索 Agent，拥有唯一的 `search_knowledge_base` Tool；agent2—agent4 仍只返回固定文本。子 Agent 不接触 Session，避免历史污染和重复记忆；Session 只传给 Manager，使同一 `{user_id}:{conversation_id}` 的多轮对话由一个明确边界维护。
+`manager` 负责理解用户请求、调用对应工具并形成最终回答。`knowledge_agent` 是无状态项目知识检索 Agent，拥有唯一的 `search_knowledge_base` Tool；agent2—agent4 仍只返回固定文本。子 Agent 不接触 Session，避免历史污染和重复记忆；Session 只传给 Manager，使同一 `{user_id}:{conversation_id}` 的多轮对话由一个明确边界维护。
 
 实现针对安装并验证过的 `openai-agents 0.22.0`：子 Agent 通过 `Agent.as_tool()` 注册，Manager 通过 `Runner.run(..., session=session)` 使用 `SQLiteSession`。Agent-as-Tool 没有配置 Session，因此子 Agent 不接触 Manager 历史。模型通过 `OpenAIChatCompletionsModel` 和 OpenAI-compatible client 接入 DeepSeek。
 
-知识库使用 LlamaIndex `VectorStoreIndex` 与 PostgreSQL `PGVectorStore`。千问 `text-embedding-v4` 生成 1024 维向量；LlamaIndex 只返回检索节点，不负责生成答案。agent1 根据证据回答并保留 `[项目使用手册 > 章节]` 引用。没有公开知识库检索 API。
+知识库使用 LlamaIndex `VectorStoreIndex` 与 PostgreSQL `PGVectorStore`。千问 `text-embedding-v4` 生成 1024 维向量；LlamaIndex 只返回检索节点，不负责生成答案。`knowledge_agent` 根据证据回答并保留 `[项目使用手册 > 章节]` 引用。没有公开知识库检索 API。
 
 ## 目录
 
 ```text
 app/
-├── agents/{manager,agent1,agent2,agent3,agent4}/
+├── agents/{manager,knowledge_agent,agent2,agent3,agent4}/
 ├── api/routes/
 ├── core/
 ├── memory/
@@ -73,7 +73,7 @@ uvicorn app.main:app --reload
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"user-001","conversation_id":"conversation-001","message":"请调用agent1"}'
+  -d '{"user_id":"user-001","conversation_id":"conversation-001","message":"请调用知识检索 Agent"}'
 ```
 
 继续使用相同的 `user_id` 与 `conversation_id` 即复用同一 SQLite Session。健康检查为 `GET /health`。

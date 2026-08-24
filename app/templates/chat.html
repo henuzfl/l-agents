@@ -8,6 +8,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2320211f'/%3E%3Cpath d='M18 18h12v12H18zm16 0h12v12H34zM18 34h12v12H18zm16 0h12v12H34z' fill='%236ed2cb'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='/markdown.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/trace.css') }}">
   </head>
   <body>
     <div class="shell">
@@ -52,7 +53,8 @@
         <h1>今天想让谁<br><em>加入对话？</em></h1>
         <p class="intro">直接指定一个或多个 Agent。Manager 会保留当前会话，并汇总它们的返回结果。</p>
         <div class="suggestions">
-          {% for agent in ["agent1", "agent2", "agent3", "agent4"] %}
+          <button data-message="请调用知识检索 Agent"><span>知识检索 Agent</span><small>查询项目知识库</small><b>↗</b></button>
+          {% for agent in ["agent2", "agent3", "agent4"] %}
           <button data-message="请调用{{ agent }}"><span>{{ agent }}</span><small>调用固定回复</small><b>↗</b></button>
           {% endfor %}
         </div>

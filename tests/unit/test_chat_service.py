@@ -3,8 +3,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agents import Agent
+from agents import Agent, RawResponsesStreamEvent
 from agents.memory import Session
+from openai.types.responses import ResponseTextDeltaEvent
 
 from app.memory import SessionFactory
 from app.schemas import ChatRequest
@@ -29,9 +30,61 @@ class FakeRunner:
         **_kwargs: Any,
     ) -> FakeResult:
         assert starting_agent.name == "manager"
-        assert input == "请调用agent1"
+        assert input == "请调用知识检索 Agent"
         self.session = session
-        return FakeResult("这是 agent1 的固定返回结果。")
+        return FakeResult("这是知识检索 Agent 的返回结果。")
+
+
+class FakeStreamingResult:
+    def __init__(self, agent: Agent[None]) -> None:
+        self.current_agent = agent
+        self.final_output = "流式回答"
+        self.cancelled = False
+
+    async def stream_events(self):  # type: ignore[no-untyped-def]
+        yield RawResponsesStreamEvent(
+            data=ResponseTextDeltaEvent(
+                content_index=0,
+                delta="PRIVATE-CHAIN-OF-THOUGHT",
+                item_id="message-1",
+                logprobs=[],
+                output_index=0,
+                sequence_number=1,
+                type="response.output_text.delta",
+            )
+        )
+        yield RawResponsesStreamEvent(
+            data=ResponseTextDeltaEvent(
+                content_index=0,
+                delta="PRIVATE-DRAFT",
+                item_id="message-1",
+                logprobs=[],
+                output_index=0,
+                sequence_number=2,
+                type="response.output_text.delta",
+            )
+        )
+
+    def cancel(self, mode: str = "immediate") -> None:
+        self.cancelled = True
+
+
+class FakeStreamingRunner(FakeRunner):
+    def __init__(self) -> None:
+        super().__init__()
+        self.streaming_result: FakeStreamingResult | None = None
+
+    def run_streamed(
+        self,
+        starting_agent: Agent[None],
+        input: str,
+        *,
+        session: Session,
+    ) -> FakeStreamingResult:
+        assert input == "请流式回答"
+        self.session = session
+        self.streaming_result = FakeStreamingResult(starting_agent)
+        return self.streaming_result
 
 
 @pytest.mark.asyncio
@@ -47,9 +100,35 @@ async def test_chat_service_passes_session_only_to_manager_run(tmp_path: Path) -
         ChatRequest(
             user_id="user-001",
             conversation_id="conversation-001",
-            message="请调用agent1",
+            message="请调用知识检索 Agent",
         )
     )
     assert runner.session is not None
     assert runner.session.session_id == "user-001:conversation-001"
-    assert response.answer == "这是 agent1 的固定返回结果。"
+    assert response.answer == "这是知识检索 Agent 的返回结果。"
+
+
+@pytest.mark.asyncio
+async def test_chat_service_streams_deltas_and_final_answer(tmp_path: Path) -> None:
+    runner = FakeStreamingRunner()
+    manager = Agent(name="manager", model="test-model")
+    service = ChatService(manager, SessionFactory(tmp_path / "sessions.db"), runner)
+
+    events = [
+        event
+        async for event in service.stream(
+            ChatRequest(
+                user_id="user-001",
+                conversation_id="conversation-stream",
+                message="请流式回答",
+            )
+        )
+    ]
+
+    assert runner.session is not None
+    assert runner.session.session_id == "user-001:conversation-stream"
+    deltas = "".join(event["text"] for event in events if event["type"] == "delta")
+    assert deltas == "流式回答"
+    assert "PRIVATE" not in str(events)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["answer"] == "流式回答"
