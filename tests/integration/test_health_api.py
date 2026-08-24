@@ -14,4 +14,5 @@ async def test_chat_page_is_server_rendered(client: httpx.AsyncClient) -> None:
     response = await client.get("/")
     assert response.status_code == 200
     assert "Agent Desk" in response.text
+    assert "/static/markdown.css" in response.text
     assert "app/static" not in response.text

@@ -1,0 +1,60 @@
+.markdown-body {
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body p { margin: 0 0 12px; white-space: normal; }
+
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5 {
+  margin: 24px 0 9px;
+  color: var(--ink);
+  font-family: "Segoe UI Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-weight: 680;
+  line-height: 1.35;
+  letter-spacing: -.015em;
+}
+
+.markdown-body h2 { font-size: 19px; }
+.markdown-body h3 { font-size: 17px; }
+.markdown-body h4,
+.markdown-body h5 { font-size: 15px; }
+.markdown-body ul,
+.markdown-body ol { margin: 8px 0 14px; padding-left: 1.45em; }
+.markdown-body li { margin: 4px 0; padding-left: 3px; }
+.markdown-body li::marker { color: var(--aqua); font-weight: 700; }
+.markdown-body strong { font-weight: 680; }
+.markdown-body em { color: #555954; }
+
+.markdown-body code {
+  padding: 2px 5px;
+  border: 1px solid #dfe0db;
+  border-radius: 5px;
+  background: #eeefeb;
+  font: 12px/1.5 Consolas, "SFMono-Regular", monospace;
+}
+
+.markdown-body pre {
+  margin: 14px 0;
+  padding: 13px 15px;
+  overflow: auto;
+  border: 1px solid #d9dbd5;
+  border-radius: 10px;
+  background: #292b29;
+  color: #eff1ec;
+}
+
+.markdown-body pre code { padding: 0; border: 0; background: transparent; color: inherit; }
+.markdown-body blockquote {
+  margin: 14px 0;
+  padding: 8px 13px;
+  border-left: 3px solid var(--aqua);
+  background: #168c880a;
+  color: #5e625d;
+}
+.markdown-body hr { height: 1px; margin: 22px 0; border: 0; background: var(--line); }

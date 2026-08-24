@@ -24,6 +24,78 @@ function escapeHtml(value) {
   return node.innerHTML;
 }
 
+function renderInlineMarkdown(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+}
+
+function renderMarkdown(value) {
+  const lines = value.replace(/\r\n?/g, "\n").split("\n");
+  const output = [];
+  let paragraph = [];
+  let listType = "";
+  let code = [];
+  let inCodeBlock = false;
+
+  const closeParagraph = () => {
+    if (paragraph.length) output.push(`<p>${paragraph.map(renderInlineMarkdown).join("<br>")}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (listType) output.push(`</${listType}>`);
+    listType = "";
+  };
+  const openList = (type) => {
+    closeParagraph();
+    if (listType !== type) {
+      closeList();
+      output.push(`<${type}>`);
+      listType = type;
+    }
+  };
+
+  lines.forEach((line) => {
+    if (/^\s*```/.test(line)) {
+      closeParagraph();
+      closeList();
+      if (inCodeBlock) {
+        output.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+        code = [];
+      }
+      inCodeBlock = !inCodeBlock;
+      return;
+    }
+    if (inCodeBlock) { code.push(line); return; }
+    const heading = line.match(/^\s*(#{1,4})\s+(.+)$/);
+    const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    const quote = line.match(/^\s*>\s?(.+)$/);
+    if (!line.trim()) { closeParagraph(); closeList(); return; }
+    if (/^\s*---+\s*$/.test(line)) { closeParagraph(); closeList(); output.push("<hr>"); return; }
+    if (heading) {
+      closeParagraph(); closeList();
+      const level = Math.min(heading[1].length + 1, 5);
+      output.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      return;
+    }
+    if (unordered) { openList("ul"); output.push(`<li>${renderInlineMarkdown(unordered[1])}</li>`); return; }
+    if (ordered) { openList("ol"); output.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`); return; }
+    if (quote) {
+      closeParagraph(); closeList();
+      output.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
+      return;
+    }
+    closeList();
+    paragraph.push(line.trim());
+  });
+  closeParagraph();
+  closeList();
+  if (inCodeBlock && code.length) output.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+  return output.join("");
+}
+
 function createConversation() {
   const conversation = { id: id(), title: "新对话", messages: [] };
   state.conversations.unshift(conversation);
@@ -59,7 +131,10 @@ function renderHistory() {
 function messageHtml(message) {
   const badge = message.role === "assistant" ? '<div class="assistant-badge"><i></i><i></i><i></i><i></i></div>' : "";
   const label = message.role === "assistant" ? "Manager" : "你";
-  return `<article class="message ${message.role}">${badge}<div class="message-body"><div class="message-label">${label}</div><p>${escapeHtml(message.content)}</p></div></article>`;
+  const content = message.role === "assistant"
+    ? `<div class="markdown-body">${renderMarkdown(message.content)}</div>`
+    : `<p>${escapeHtml(message.content)}</p>`;
+  return `<article class="message ${message.role}">${badge}<div class="message-body"><div class="message-label">${label}</div>${content}</div></article>`;
 }
 
 function renderConversation() {
