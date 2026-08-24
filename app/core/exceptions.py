@@ -12,3 +12,11 @@ class SessionError(AgentApplicationError):
 
 class AgentExecutionError(AgentApplicationError):
     """The manager agent failed to execute."""
+
+
+class KnowledgeConfigurationError(ConfigurationError):
+    """Knowledge-base configuration is incomplete or invalid."""
+
+
+class KnowledgeRetrievalError(AgentApplicationError):
+    """Knowledge retrieval or indexing failed."""

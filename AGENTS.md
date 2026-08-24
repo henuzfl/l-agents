@@ -15,6 +15,7 @@ The server-rendered UI uses `app/templates/chat.html` with assets in `app/static
 - `pytest`: run the complete offline test suite.
 - `ruff check .`: enforce imports, style, and async correctness.
 - `python -m compileall app`: verify that application modules compile.
+- `python -m app.knowledge.cli {init,rebuild,status}`: manage the pgvector knowledge index.
 - `make install`, `make test`, `make lint`, and `make compile`: equivalent shortcuts where Make is available.
 
 ## Coding Style & Naming Conventions
@@ -29,7 +30,7 @@ Use pytest and pytest-asyncio. Name files `test_*.py` and tests `test_<behavior>
 
 ## Architecture & Security Constraints
 
-Only the Manager receives a Session. Child agents must remain stateless, tool-free, and must not access Manager history. Keep API keys in `.env`; never commit secrets, SQLite data, traces, or raw model requests.
+Only the Manager receives a Session. Child agents must remain stateless and must not access Manager history. Only agent1 may register the internal `search_knowledge_base` tool; agent2–agent4 remain tool-free. Keep API keys and database URLs in `.env`; never commit secrets, SQLite data, traces, or raw model requests.
 
 ## Commit & Pull Request Guidelines
 

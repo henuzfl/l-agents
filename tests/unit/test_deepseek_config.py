@@ -17,3 +17,7 @@ def test_container_builds_deepseek_chat_completions_model(tmp_path: Path) -> Non
     assert isinstance(container.model, OpenAIChatCompletionsModel)
     assert container.model.model == "deepseek-chat"
     assert str(container.deepseek_client.base_url) == "https://api.deepseek.com"
+    assert [tool.name for tool in container.agent1.tools] == ["search_knowledge_base"]
+    assert container.agent2.tools == []
+    assert container.agent3.tools == []
+    assert container.agent4.tools == []

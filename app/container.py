@@ -7,6 +7,7 @@ from app.agents.agent3 import create_agent3
 from app.agents.agent4 import create_agent4
 from app.agents.manager import create_manager_agent
 from app.core.config import Settings
+from app.knowledge import KnowledgeSearchService, create_knowledge_search_tool
 from app.memory import SessionFactory
 from app.services import ChatService
 
@@ -27,7 +28,9 @@ class Container:
             model=settings.deepseek_model,
             openai_client=self.deepseek_client,
         )
-        self.agent1 = create_agent1(self.model)
+        self.knowledge_search_service = KnowledgeSearchService(settings)
+        self.knowledge_search_tool = create_knowledge_search_tool(self.knowledge_search_service)
+        self.agent1 = create_agent1(self.model, self.knowledge_search_tool)
         self.agent2 = create_agent2(self.model)
         self.agent3 = create_agent3(self.model)
         self.agent4 = create_agent4(self.model)
