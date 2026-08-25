@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-from llama_index.core import StorageContext, VectorStoreIndex
+from llama_index.core import Document, StorageContext, VectorStoreIndex
 from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.postgres import PGVectorStore
@@ -11,7 +11,7 @@ from sqlalchemy.engine import URL, make_url
 from app.core.config import Settings
 from app.core.exceptions import KnowledgeConfigurationError, KnowledgeRetrievalError
 
-from .documents import build_project_manual_nodes
+from .documents import build_document_nodes, build_project_manual_nodes
 
 _IDENTIFIER_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
 
@@ -118,6 +118,23 @@ class LlamaIndexKnowledgeStore:
             raise
         except Exception as exc:
             raise KnowledgeRetrievalError("知识库重建失败。") from exc
+
+    def add_document(self, document: Document) -> int:
+        try:
+            vector_store = self.create_vector_store()
+            nodes = build_document_nodes(document)
+            storage_context = StorageContext.from_defaults(vector_store=vector_store)
+            VectorStoreIndex(
+                nodes,
+                storage_context=storage_context,
+                embed_model=self.create_embedding_model(),
+                show_progress=False,
+            )
+            return len(nodes)
+        except KnowledgeConfigurationError:
+            raise
+        except Exception as exc:
+            raise KnowledgeRetrievalError("文档写入知识库失败。") from exc
 
     def create_retriever(self) -> BaseRetriever:
         vector_store = self.create_vector_store()

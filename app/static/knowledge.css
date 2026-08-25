@@ -1,0 +1,49 @@
+.main-nav { display: grid; gap: 4px; margin-top: 14px; }
+.main-nav-link { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 9px; color: var(--muted); font-size: 13px; text-decoration: none; }
+.main-nav-link span { width: 16px; text-align: center; }
+.main-nav-link:hover, .main-nav-link.active { color: var(--ink); background: #ffffff9e; }
+.main-nav-link.active { font-weight: 650; }
+.knowledge-nav { margin-top: 4px; }
+.sidebar-spacer { flex: 1; }
+.knowledge-workspace { min-width: 0; height: 100vh; overflow: auto; padding: 52px clamp(28px, 6vw, 88px); background: var(--canvas); }
+.knowledge-header { display: flex; align-items: flex-end; justify-content: space-between; max-width: 1050px; margin: 0 auto 44px; padding-bottom: 25px; border-bottom: 1px solid var(--line); }
+.knowledge-header .eyebrow { margin-bottom: 9px; }
+.knowledge-header h1 { font-size: 48px; letter-spacing: -.04em; }
+.knowledge-state { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
+.knowledge-state b { font-weight: 550; }
+.knowledge-state.offline span { width: 7px; height: 7px; border-radius: 50%; background: #b95045; box-shadow: 0 0 0 4px #b9504518; }
+.knowledge-content { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 22px; max-width: 1050px; margin: auto; }
+.upload-card, .knowledge-summary { border: 1px solid var(--line); border-radius: 18px; background: #ffffffa8; }
+.upload-card { padding: 28px; }
+.upload-copy { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 25px; }
+.upload-icon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 10px; color: #fff; background: var(--ink); font-size: 20px; }
+.upload-copy h2 { margin: 1px 0 5px; font-size: 18px; }
+.upload-copy p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.drop-zone { display: flex; min-height: 220px; align-items: center; justify-content: center; flex-direction: column; border: 1px dashed #bfc2bb; border-radius: 14px; background: #f7f8f5; cursor: pointer; text-align: center; transition: .2s; }
+.drop-zone:hover, .drop-zone.dragging { border-color: var(--aqua); background: #f3fbfa; }
+.drop-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.file-mark { display: grid; width: 42px; height: 42px; margin-bottom: 14px; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 20px; }
+.drop-zone strong { font-size: 13px; }
+.drop-zone small { margin-top: 7px; color: #939690; font-size: 10px; }
+.primary-button { width: 100%; height: 43px; margin-top: 12px; border: 0; border-radius: 11px; color: #fff; background: var(--ink); cursor: pointer; font-weight: 650; }
+.primary-button:hover:not(:disabled) { background: var(--aqua); }
+.primary-button:disabled { color: #a5a7a2; background: #e6e7e3; cursor: default; }
+.upload-message { margin-top: 12px; padding: 11px 13px; border-radius: 10px; font-size: 11px; }
+.upload-message.success { color: #146b67; background: #e8f7f5; }
+.upload-message.error { color: #8f3d35; background: #fff0ee; }
+.knowledge-summary { padding: 27px; }
+.summary-label { margin: 0 0 18px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.knowledge-summary > strong { display: block; font-family: Georgia, serif; font-size: 50px; font-weight: 400; }
+.knowledge-summary > span { color: var(--muted); font-size: 11px; }
+.knowledge-summary dl { margin: 28px 0 0; }
+.knowledge-summary dl div { padding: 13px 0; border-top: 1px solid var(--line); }
+.knowledge-summary dt { margin-bottom: 5px; color: #969994; font-size: 9px; }
+.knowledge-summary dd { margin: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 650; }
+@media (max-width: 760px) {
+  .knowledge-workspace { height: 100dvh; padding: 76px 15px 30px; }
+  .knowledge-header { align-items: flex-start; flex-direction: column; gap: 16px; margin-bottom: 22px; }
+  .knowledge-header h1 { font-size: 38px; }
+  .knowledge-content { grid-template-columns: 1fr; }
+  .knowledge-summary { order: -1; }
+  .drop-zone { min-height: 180px; }
+}

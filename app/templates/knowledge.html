@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>知识库 · Agent Desk</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/knowledge.css') }}">
+  </head>
+  <body><div class="shell">
+    <button id="menuButton" class="mobile-menu" aria-label="打开菜单"><span></span><span></span></button><div id="scrim" class="scrim" hidden></div>
+    <aside id="sidebar" class="sidebar">
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span>Agent Desk</span></div>
+      <nav class="main-nav knowledge-nav" aria-label="主菜单"><a class="main-nav-link" href="/"><span>◌</span>对话</a><a class="main-nav-link active" href="/knowledge"><span>◇</span>知识库</a></nav>
+      <div class="sidebar-spacer"></div><div class="sidebar-footer"><div class="status"><span></span><div><strong>Knowledge</strong><small>pgvector 索引</small></div></div><div class="avatar">本地</div></div>
+    </aside>
+    <main class="knowledge-workspace">
+      <header class="knowledge-header"><div><p class="eyebrow">Knowledge workspace</p><h1>知识库</h1></div><div id="knowledgeState" class="knowledge-state"><span class="live-dot"></span><b>正在读取状态…</b></div></header>
+      <section class="knowledge-content">
+        <div class="upload-card"><div class="upload-copy"><span class="upload-icon">＋</span><div><h2>添加文档</h2><p>上传后会提取文本、自动分块，并写入现有知识索引。</p></div></div>
+          <form id="uploadForm"><label id="dropZone" class="drop-zone" for="documentInput"><input id="documentInput" name="file" type="file" accept=".txt,.md,.markdown,.pdf,.docx" required><span class="file-mark">⇧</span><strong id="filePrompt">拖放文档到这里，或点击选择</strong><small>TXT、Markdown、PDF、DOCX · 最大 10 MB</small></label><button id="uploadButton" class="primary-button" type="submit" disabled>上传并索引</button></form><div id="uploadMessage" class="upload-message" hidden></div>
+        </div>
+        <aside class="knowledge-summary"><p class="summary-label">索引概览</p><strong id="nodeCount">—</strong><span>文本节点</span><dl><div><dt>Embedding</dt><dd id="embeddingModel">—</dd></div><div><dt>向量维度</dt><dd id="embeddingDimensions">—</dd></div><div><dt>数据表</dt><dd id="knowledgeTable">—</dd></div></dl></aside>
+      </section>
+    </main>
+  </div><script src="{{ url_for('static', path='/knowledge.js') }}" defer></script></body>
+</html>

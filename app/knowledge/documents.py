@@ -57,3 +57,12 @@ def build_project_manual_nodes(
 ) -> list[BaseNode]:
     splitter = SentenceSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return splitter.get_nodes_from_documents(build_project_manual_documents())
+
+
+def build_document_nodes(
+    document: Document,
+    chunk_size: int = 512,
+    chunk_overlap: int = 80,
+) -> list[BaseNode]:
+    splitter = SentenceSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    return splitter.get_nodes_from_documents([document])

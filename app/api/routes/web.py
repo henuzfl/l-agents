@@ -11,3 +11,8 @@ templates = Jinja2Templates(directory=Path("app/templates"))
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name="chat.html")
+
+
+@router.get("/knowledge", response_class=HTMLResponse)
+async def knowledge(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="knowledge.html")

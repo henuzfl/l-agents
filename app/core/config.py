@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     qwen_embedding_model: str = "text-embedding-v4"
     qwen_embedding_dimensions: int = 1024
     knowledge_top_k: int = 5
+    knowledge_upload_max_bytes: int = 10 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
