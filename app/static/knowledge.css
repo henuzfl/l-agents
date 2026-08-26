@@ -39,6 +39,61 @@
 .knowledge-summary dl div { padding: 13px 0; border-top: 1px solid var(--line); }
 .knowledge-summary dt { margin-bottom: 5px; color: #969994; font-size: 9px; }
 .knowledge-summary dd { margin: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 650; }
+.pipeline[hidden] { display: none; }
+.pipeline { margin-top: 22px; padding: 19px; border: 1px solid #d7dad4; border-radius: 14px; background: #f4f5f2; }
+.pipeline-head { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 15px; }
+.pipeline-head div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pipeline-head small { color: #8d908a; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.pipeline-head strong { overflow: hidden; text-overflow: ellipsis; font-size: 12px; white-space: nowrap; }
+.pipeline-head > span { padding: 5px 8px; border-radius: 7px; color: #146b67; background: #e3f3f1; font-size: 9px; font-weight: 700; }
+.pipeline ol { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; padding: 0; list-style: none; }
+.pipeline li { position: relative; display: grid; grid-template-columns: 30px 1fr; gap: 9px; align-items: center; padding-right: 18px; }
+.pipeline li:not(:last-child)::after { content: ""; position: absolute; z-index: 0; top: 14px; right: -1px; width: 18px; height: 1px; background: #ccd0c9; }
+.pipeline li i { display: grid; z-index: 1; width: 29px; height: 29px; place-items: center; border: 1px solid #c9ccc5; border-radius: 50%; color: #92958f; background: #f4f5f2; font: 700 8px "Cascadia Code", monospace; }
+.pipeline li div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.pipeline li strong { font: 650 10px "Cascadia Code", monospace; text-transform: uppercase; }
+.pipeline li small { overflow: hidden; color: #8d908a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline li b { position: absolute; top: 35px; left: 39px; color: #959892; font-size: 8px; font-weight: 650; }
+.pipeline li.running i { color: #fff; border-color: var(--aqua); background: var(--aqua); animation: pipeline-pulse 1.4s ease-in-out infinite; }
+.pipeline li.completed i { color: #fff; border-color: var(--ink); background: var(--ink); }
+.pipeline li.completed b { color: #146b67; }
+.pipeline li.failed i { color: #fff; border-color: #b95045; background: #b95045; }
+.pipeline li.failed b { color: #a4433a; }
+.pipeline-error { margin: 22px 0 0; padding: 9px 11px; border-radius: 8px; color: #8f3d35; background: #fff0ee; font-size: 10px; }
+.job-section { max-width: 1050px; margin: 28px auto 0; padding-top: 28px; border-top: 1px solid var(--line); }
+.job-section-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+.job-section-head .summary-label { margin-bottom: 5px; }
+.job-section-head h2 { margin: 0; font-size: 17px; }
+.job-section-head h2 span { margin-left: 5px; color: #969994; font: 500 10px "Cascadia Code", monospace; }
+.job-tools { display: flex; align-items: center; gap: 7px; }
+.job-tools label { display: flex; width: 190px; height: 30px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: #ffffff82; }
+.job-tools label span { color: #969994; }
+.job-tools input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 10px; }
+.job-section-head button { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: transparent; cursor: pointer; font-size: 10px; }
+.job-list { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #ffffff8f; }
+.job-row { display: grid; grid-template-columns: minmax(180px, 1fr) auto 58px auto; gap: 18px; align-items: center; padding: 14px 17px; }
+.job-row + .job-row { border-top: 1px solid var(--line); }
+.job-file { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.job-select { width: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; }
+.job-file > i { display: grid; width: 29px; height: 29px; flex: none; place-items: center; border-radius: 8px; color: var(--aqua); background: #e7f4f2; font-style: normal; }
+.job-file div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.job-file strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.job-file small { color: #979a94; font-size: 8px; }
+.job-stages { display: flex; gap: 5px; }
+.job-stages span { padding: 4px 6px; border-radius: 6px; color: #92958f; background: #eff0ed; font: 650 8px "Cascadia Code", monospace; }
+.job-stages span.running { color: #146b67; background: #e2f4f1; }
+.job-stages span.completed { color: #f7f7f5; background: #3c3e3a; }
+.job-stages span.failed { color: #8f3d35; background: #fae8e5; }
+.job-state { justify-self: end; color: #878a84; font-size: 9px; }
+.job-state.completed { color: #146b67; }
+.job-state.failed { color: #a4433a; }
+.job-actions { display: flex; align-items: center; gap: 4px; }
+.job-actions a, .job-actions button { padding: 5px 7px; border: 0; border-radius: 6px; color: #686b66; background: transparent; cursor: pointer; font-size: 9px; text-decoration: none; white-space: nowrap; }
+.job-actions a:hover, .job-actions button:hover:not(:disabled) { color: var(--ink); background: #eceee9; }
+.job-actions .danger:hover:not(:disabled) { color: #9a4037; background: #f9e9e6; }
+.job-actions button:disabled { opacity: .35; cursor: default; }
+.empty-jobs { margin: 0; padding: 25px; color: #969994; font-size: 10px; text-align: center; }
+@keyframes pipeline-pulse { 50% { box-shadow: 0 0 0 5px #168c8819; } }
 @media (max-width: 760px) {
   .knowledge-workspace { height: 100dvh; padding: 76px 15px 30px; }
   .knowledge-header { align-items: flex-start; flex-direction: column; gap: 16px; margin-bottom: 22px; }
@@ -46,4 +101,11 @@
   .knowledge-content { grid-template-columns: 1fr; }
   .knowledge-summary { order: -1; }
   .drop-zone { min-height: 180px; }
+  .pipeline ol { grid-template-columns: 1fr; gap: 24px; }
+  .pipeline li:not(:last-child)::after { top: 29px; right: auto; bottom: -24px; left: 14px; width: 1px; height: 24px; }
+  .job-row { grid-template-columns: 1fr auto; }
+  .job-stages { grid-column: 1 / -1; }
+  .job-actions { grid-column: 1 / -1; }
+  .job-section-head { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .job-tools, .job-tools label { width: 100%; }
 }

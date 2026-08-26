@@ -15,6 +15,7 @@ dependencies = [
   "llama-index-core>=0.14.24,<0.15",
   "llama-index-embeddings-openai>=0.6,<0.7",
   "llama-index-vector-stores-postgres>=0.8.1,<0.9",
+  "minio>=7.2,<8",
   "openai-agents>=0.2,<1",
   "pypdf>=5.0,<7",
   "pydantic>=2.10,<3",

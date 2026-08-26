@@ -1,6 +1,8 @@
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import get_knowledge_document_service
@@ -16,15 +18,87 @@ async def knowledge_status(
     return await run_in_threadpool(service.status)
 
 
-@router.post("/documents", status_code=201)
+@router.get("/documents")
+async def list_knowledge_documents(
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+) -> list[dict[str, object]]:
+    return service.list_jobs()
+
+
+@router.get("/documents/{task_id}")
+async def get_knowledge_document_job(
+    task_id: str,
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+) -> dict[str, object]:
+    try:
+        return service.get_job(task_id).to_dict()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="处理任务不存在。") from exc
+
+
+@router.get("/documents/{task_id}/download")
+async def download_knowledge_document(
+    task_id: str,
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+) -> Response:
+    try:
+        filename, content_type, content = await run_in_threadpool(service.download, task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="文档不存在。") from exc
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@router.post("/documents/{task_id}/reprocess", status_code=202)
+async def reprocess_knowledge_document(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+) -> dict[str, object]:
+    try:
+        job = await run_in_threadpool(service.restart, task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="文档不存在。") from exc
+    except InvalidKnowledgeDocument as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    background_tasks.add_task(service.process, task_id)
+    return job.to_dict()
+
+
+@router.delete("/documents/{task_id}", status_code=204)
+async def delete_knowledge_document(
+    task_id: str,
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+) -> Response:
+    try:
+        await run_in_threadpool(service.delete, task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="文档不存在。") from exc
+    except InvalidKnowledgeDocument as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@router.post("/documents", status_code=202)
 async def upload_knowledge_document(
+    background_tasks: BackgroundTasks,
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
     file: Annotated[UploadFile, File(description="知识库文档")],
-) -> dict[str, int | str]:
+) -> dict[str, object]:
     filename = file.filename or ""
     content = await file.read(service.max_upload_bytes + 1)
     await file.close()
     try:
-        return await run_in_threadpool(service.upload, filename, content)
+        job = await run_in_threadpool(
+            service.start_upload,
+            filename,
+            content,
+            file.content_type,
+        )
+        background_tasks.add_task(service.process, job.task_id)
+        return job.to_dict()
     except InvalidKnowledgeDocument as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

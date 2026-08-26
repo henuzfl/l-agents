@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from llama_index.core import Document, StorageContext, VectorStoreIndex
 from llama_index.core.base.base_retriever import BaseRetriever
+from llama_index.core.schema import BaseNode
+from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import create_engine, text
@@ -120,9 +122,11 @@ class LlamaIndexKnowledgeStore:
             raise KnowledgeRetrievalError("知识库重建失败。") from exc
 
     def add_document(self, document: Document) -> int:
+        return self.add_nodes(build_document_nodes(document))
+
+    def add_nodes(self, nodes: list[BaseNode]) -> int:
         try:
             vector_store = self.create_vector_store()
-            nodes = build_document_nodes(document)
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
             VectorStoreIndex(
                 nodes,
@@ -135,6 +139,18 @@ class LlamaIndexKnowledgeStore:
             raise
         except Exception as exc:
             raise KnowledgeRetrievalError("文档写入知识库失败。") from exc
+
+    def delete_document(self, object_name: str) -> None:
+        try:
+            self.create_vector_store().delete_nodes(
+                filters=MetadataFilters(
+                    filters=[MetadataFilter(key="minio_object", value=object_name)]
+                )
+            )
+        except KnowledgeConfigurationError:
+            raise
+        except Exception as exc:
+            raise KnowledgeRetrievalError("文档向量清理失败。") from exc
 
     def create_retriever(self) -> BaseRetriever:
         vector_store = self.create_vector_store()

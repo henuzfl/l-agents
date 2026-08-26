@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     qwen_embedding_dimensions: int = 1024
     knowledge_top_k: int = 5
     knowledge_upload_max_bytes: int = 10 * 1024 * 1024
+    knowledge_registry_path: Path = Path("data/knowledge_documents.db")
+    minio_endpoint: str | None = None
+    minio_access_key: str | None = None
+    minio_secret_key: SecretStr | None = None
+    minio_bucket: str = "knowledge-documents"
+    minio_secure: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
