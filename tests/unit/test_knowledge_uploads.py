@@ -36,6 +36,16 @@ class FakeStore:
         ]
         return len(chunks), chunks
 
+    def get_document_chunk(self, object_name: str, node_id: str) -> KnowledgeChunk | None:
+        return next(
+            (
+                KnowledgeChunk(node.node_id, node.text, dict(node.metadata))
+                for node in FakeStore.nodes
+                if node.metadata.get("minio_object") == object_name and node.node_id == node_id
+            ),
+            None,
+        )
+
 
 class FakeObjectStorage:
     bucket = "knowledge-documents"
@@ -136,6 +146,24 @@ def test_registry_survives_service_recreation_and_delete_cleans_sources(tmp_path
     recreated.delete(job.task_id)
     assert recreated.list_jobs() == []
     assert storage.objects == {}
+
+
+def test_download_asset_requires_a_chunk_owned_by_the_document(tmp_path: Path) -> None:
+    service = build_service(tmp_path)
+    job = service.start_upload("manual.md", b"# Knowledge", "text/markdown")
+    service.process(job.task_id)
+    node = FakeStore.nodes[0]
+    asset_name = f"{job.object_name.rsplit('/', 1)[0]}/assets/diagram.png"
+    node.metadata["asset_object"] = asset_name
+    FakeObjectStorage.objects[asset_name] = b"image-content"
+
+    filename, content_type, content = service.download_asset(job.task_id, node.node_id)
+
+    assert filename == "diagram.png"
+    assert content_type == "image/png"
+    assert content == b"image-content"
+    with pytest.raises(KeyError):
+        service.download_asset(job.task_id, "missing-node")
 
 
 def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> None:

@@ -76,6 +76,32 @@ async def list_knowledge_document_chunks(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.get("/documents/{task_id}/chunks/{node_id}/asset")
+async def view_knowledge_chunk_asset(
+    task_id: str,
+    node_id: str,
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+) -> Response:
+    try:
+        filename, content_type, content = await run_in_threadpool(
+            service.download_asset,
+            task_id,
+            node_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="分片图片不存在。") from exc
+    except InvalidKnowledgeDocument as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
 @router.post("/documents/{task_id}/reprocess", status_code=202)
 async def reprocess_knowledge_document(
     task_id: str,

@@ -4,7 +4,7 @@
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <title>知识库 · Agent Desk</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', path='/knowledge.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/knowledge.css') }}?v=20260827.2">
   </head>
   <body><div class="shell">
     <button id="menuButton" class="mobile-menu" aria-label="打开菜单"><span></span><span></span></button><div id="scrim" class="scrim" hidden></div>
@@ -21,13 +21,16 @@
         <div class="chunk-explorer-head"><div><p class="summary-label">Source lineage</p><h2>原文与分片</h2></div><button id="closeChunkExplorer" type="button" aria-label="关闭分片查看">关闭</button></div>
         <div class="source-node"><span>原始文档</span><div><strong id="chunkSourceFilename">—</strong><code id="chunkSourceObject">—</code></div><a id="chunkSourceDownload" href="#">下载原文</a></div>
         <div class="lineage-bridge"><i></i><span id="chunkRelationCount">关联 0 个分片</span></div>
-        <div class="chunk-toolbar"><label><span>⌕</span><input id="chunkSearch" type="search" placeholder="搜索分片内容或节点 ID" aria-label="搜索分片"></label><select id="chunkType" aria-label="按内容类型筛选"><option value="">全部类型</option><option value="text">正文</option><option value="table">表格</option><option value="code">代码</option><option value="image">图片</option><option value="scanned_page">扫描页</option></select></div>
+        <div class="chunk-toolbar"><label><span>⌕</span><input id="chunkSearch" type="search" placeholder="搜索分片内容或节点 ID" aria-label="搜索分片"></label><div id="chunkTypeFilters" class="chunk-type-filters" role="group" aria-label="按内容类型筛选"></div></div>
+        <div class="chunk-list-meta"><span id="chunkResultSummary">0 个分片</span><small>点击展开可查看完整内容</small></div>
         <div id="chunkList" class="chunk-list"></div>
+        <nav id="chunkPagination" class="chunk-pagination" aria-label="分片分页" hidden><button id="chunkPrevPage" type="button">上一页</button><span id="chunkPageInfo">第 1 / 1 页</span><button id="chunkNextPage" type="button">下一页</button></nav>
       </section>
       <div id="uploadDialog" class="upload-dialog" hidden><button class="upload-dialog-backdrop" type="button" data-close-upload aria-label="关闭上传窗口"></button><section class="upload-dialog-card" role="dialog" aria-modal="true" aria-labelledby="uploadDialogTitle"><div class="upload-dialog-head"><div><p class="summary-label">Add source</p><h2 id="uploadDialogTitle">上传文档</h2><p>原始文件保存到 MinIO，上传完成后在后台执行切分与向量化。</p></div><button id="closeUploadButton" type="button" aria-label="关闭上传窗口">关闭</button></div>
         <form id="uploadForm"><label id="dropZone" class="drop-zone" for="documentInput"><input id="documentInput" name="file" type="file" accept=".txt,.md,.markdown,.pdf,.docx" required><span class="file-mark">⇧</span><strong id="filePrompt">拖放文档到这里，或点击选择</strong><small>TXT、Markdown、PDF、DOCX · 最大 10 MB</small></label><button id="uploadButton" class="primary-button" type="submit" disabled>上传文档</button></form><div id="uploadMessage" class="upload-message" hidden></div>
         <div id="pipeline" class="pipeline" hidden aria-live="polite"><div class="pipeline-head"><div><small>后台处理</small><strong id="pipelineFilename">—</strong></div><span id="pipelineStatus">等待开始</span></div><ol><li id="stageLoading"><i>01</i><div><strong>Loading</strong><small>保存原始文档到 MinIO</small></div><b></b></li><li id="stageChunking"><i>02</i><div><strong>Chunking</strong><small>提取文本并生成文本块</small></div><b></b></li><li id="stageEmbedding"><i>03</i><div><strong>Embedding</strong><small>生成向量并写入 pgvector</small></div><b></b></li></ol><div id="elementSummary" class="element-summary" hidden></div><ul id="pipelineWarnings" class="pipeline-warnings" hidden></ul><p id="pipelineError" class="pipeline-error" hidden></p></div>
       </section></div>
+      <div id="imagePreviewDialog" class="image-preview-dialog" hidden><button class="image-preview-backdrop" type="button" data-close-image aria-label="关闭图片预览"></button><section class="image-preview-card" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle"><header><div><p class="summary-label">Chunk asset</p><h2 id="imagePreviewTitle">分片图片</h2></div><button id="closeImagePreview" type="button" aria-label="关闭图片预览">关闭</button></header><figure><img id="imagePreview" alt="分片图片大图"><figcaption id="imagePreviewCaption"></figcaption></figure></section></div>
     </main>
-  </div><script src="{{ url_for('static', path='/knowledge.js') }}" defer></script></body>
+  </div><script src="{{ url_for('static', path='/knowledge.js') }}?v=20260827.2" defer></script></body>
 </html>

@@ -216,6 +216,30 @@ class LlamaIndexKnowledgeStore:
         ]
         return total, chunks
 
+    def get_document_chunk(self, object_name: str, node_id: str) -> KnowledgeChunk | None:
+        sync_url, _ = self._database_urls()
+        table_name = f"data_{self._settings.knowledge_table}"
+        statement = text(
+            f'SELECT node_id, text, metadata_ FROM "{self._settings.knowledge_schema}".'
+            f'"{table_name}" WHERE metadata_->>\'minio_object\' = :object_name '
+            "AND node_id = :node_id LIMIT 1"
+        )
+        try:
+            with create_engine(sync_url).connect() as connection:
+                row = connection.execute(
+                    statement,
+                    {"object_name": object_name, "node_id": node_id},
+                ).mappings().first()
+        except Exception as exc:
+            raise KnowledgeRetrievalError("无法读取文档分片。") from exc
+        if row is None:
+            return None
+        return KnowledgeChunk(
+            node_id=str(row["node_id"]),
+            content=str(row["text"]),
+            metadata=dict(row["metadata_"]) if isinstance(row["metadata_"], dict) else {},
+        )
+
     def status(self) -> KnowledgeStatus:
         sync_url, _ = self._database_urls()
         table_name = f"data_{self._settings.knowledge_table}"

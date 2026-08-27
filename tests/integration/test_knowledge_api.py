@@ -47,6 +47,11 @@ class FakeKnowledgeDocumentService:
     def download(self, _task_id: str) -> tuple[str, str, bytes]:
         return "manual.txt", "text/plain", b"knowledge"
 
+    def download_asset(self, _task_id: str, node_id: str) -> tuple[str, str, bytes]:
+        if node_id != "node-1":
+            raise KeyError(node_id)
+        return "diagram.png", "image/png", b"image-content"
+
     def list_chunks(self, task_id: str, **_filters: object) -> dict[str, object]:
         return {
             "task_id": task_id,
@@ -64,6 +69,10 @@ class FakeKnowledgeDocumentService:
                     "content": "知识正文",
                     "element_type": "text",
                     "minio_object": "2026/08/26/task-1/manual.txt",
+                    "asset_object": "2026/08/26/task-1/assets/diagram.png",
+                    "asset_url": (
+                        f"/api/v1/knowledge/documents/{task_id}/chunks/node-1/asset"
+                    ),
                 }
             ],
         }
@@ -115,6 +124,7 @@ async def test_document_management_endpoints(client: httpx.AsyncClient) -> None:
 
     listing = await client.get("/api/v1/knowledge/documents")
     chunks = await client.get("/api/v1/knowledge/documents/task-1/chunks")
+    asset = await client.get("/api/v1/knowledge/documents/task-1/chunks/node-1/asset")
     download = await client.get("/api/v1/knowledge/documents/task-1/download")
     reprocess = await client.post("/api/v1/knowledge/documents/task-1/reprocess")
     deletion = await client.delete("/api/v1/knowledge/documents/task-1")
@@ -124,6 +134,10 @@ async def test_document_management_endpoints(client: httpx.AsyncClient) -> None:
     assert chunks.status_code == 200
     assert chunks.json()["chunks"][0]["node_id"] == "node-1"
     assert chunks.json()["chunks"][0]["minio_object"].endswith("manual.txt")
+    assert asset.status_code == 200
+    assert asset.content == b"image-content"
+    assert asset.headers["content-type"] == "image/png"
+    assert asset.headers["content-disposition"].startswith("inline;")
     assert download.content == b"knowledge"
     assert "manual.txt" in download.headers["content-disposition"]
     assert reprocess.status_code == 202

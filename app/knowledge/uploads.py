@@ -347,6 +347,21 @@ class KnowledgeDocumentService:
         content_type = mimetypes.guess_type(job.filename)[0] or "application/octet-stream"
         return job.filename, content_type, self._storage().download(job.object_name)
 
+    def download_asset(self, task_id: str, node_id: str) -> tuple[str, str, bytes]:
+        job = self.get_job(task_id)
+        if job.status != "completed":
+            raise InvalidKnowledgeDocument("文档处理完成后才能查看图片。")
+        chunk = self._store_factory(self._settings).get_document_chunk(job.object_name, node_id)
+        asset_object = chunk.metadata.get("asset_object") if chunk is not None else None
+        if not isinstance(asset_object, str) or not asset_object:
+            raise KeyError(node_id)
+        asset_prefix = f"{job.object_name.rsplit('/', 1)[0]}/assets/"
+        if not asset_object.startswith(asset_prefix):
+            raise InvalidKnowledgeDocument("分片图片不属于当前文档。")
+        filename = Path(asset_object).name
+        content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return filename, content_type, self._storage().download(asset_object)
+
     def list_chunks(
         self,
         task_id: str,
@@ -388,6 +403,12 @@ class KnowledgeDocumentService:
                     "language": chunk.metadata.get("language"),
                     "minio_object": chunk.metadata.get("minio_object", job.object_name),
                     "asset_object": chunk.metadata.get("asset_object"),
+                    "asset_url": (
+                        f"/api/v1/knowledge/documents/{job.task_id}/chunks/"
+                        f"{chunk.node_id}/asset"
+                        if chunk.metadata.get("asset_object")
+                        else None
+                    ),
                 }
                 for index, chunk in enumerate(chunks, start=1)
             ],
