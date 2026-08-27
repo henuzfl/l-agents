@@ -12,7 +12,13 @@ from app.knowledge import (
     KnowledgeSearchService,
     create_knowledge_search_tool,
 )
-from app.memory import SessionFactory
+from app.memory import (
+    DeepSeekMemorySummarizer,
+    SessionFactory,
+    ShortTermMemoryOptimizer,
+    ShortTermMemorySettings,
+    SummaryStore,
+)
 from app.services import ChatService
 from app.services.execution_events import publish_nested_agent_event
 
@@ -49,4 +55,28 @@ class Container:
             on_stream=publish_nested_agent_event,
         )
         self.session_factory = SessionFactory(settings.sqlite_session_path)
-        self.chat_service = ChatService(self.manager_agent, self.session_factory, Runner)
+        memory_optimizer = None
+        if settings.short_term_memory_enabled:
+            memory_optimizer = ShortTermMemoryOptimizer(
+                SummaryStore(settings.sqlite_session_path),
+                DeepSeekMemorySummarizer(
+                    self.deepseek_client,
+                    settings.deepseek_model,
+                    settings.short_term_summary_target_tokens,
+                ),
+                ShortTermMemorySettings(
+                    context_max_tokens=settings.short_term_context_max_tokens,
+                    summary_target_tokens=settings.short_term_summary_target_tokens,
+                    recent_turns=settings.short_term_recent_turns,
+                    min_recent_turns=settings.short_term_min_recent_turns,
+                    summary_batch_turns=settings.short_term_summary_batch_turns,
+                    single_message_max_tokens=settings.short_term_single_message_max_tokens,
+                    fallback_turns=settings.short_term_fallback_turns,
+                ),
+            )
+        self.chat_service = ChatService(
+            self.manager_agent,
+            self.session_factory,
+            Runner,
+            memory_optimizer,
+        )

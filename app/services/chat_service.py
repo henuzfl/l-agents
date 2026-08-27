@@ -7,11 +7,12 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
-from agents import Agent, AgentUpdatedStreamEvent
+from agents import Agent, AgentUpdatedStreamEvent, RunConfig
 from agents.memory import Session
 
 from app.core.exceptions import AgentExecutionError, SessionError
 from app.memory import SessionFactory
+from app.memory.short_term import ShortTermMemoryOptimizer
 from app.schemas import ChatRequest, ChatResponse
 
 from .execution_events import bind_nested_event_sink, reset_nested_event_sink
@@ -38,6 +39,7 @@ class RunnerLike(Protocol):
         input: str,
         *,
         session: Session,
+        run_config: RunConfig | None = None,
     ) -> RunResultLike: ...
 
     def run_streamed(
@@ -46,6 +48,7 @@ class RunnerLike(Protocol):
         input: str,
         *,
         session: Session,
+        run_config: RunConfig | None = None,
     ) -> StreamingRunResultLike: ...
 
 
@@ -55,19 +58,35 @@ class ChatService:
         manager_agent: Agent[None],
         session_factory: SessionFactory,
         runner: RunnerLike,
+        memory_optimizer: ShortTermMemoryOptimizer | None = None,
     ) -> None:
         self._manager_agent = manager_agent
         self._session_factory = session_factory
         self._runner = runner
+        self._memory_optimizer = memory_optimizer
+
+    async def _run_config(self, session: Session, message: str) -> RunConfig | None:
+        if self._memory_optimizer is None:
+            return None
+        return await self._memory_optimizer.prepare_run_config(session, message)
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         try:
             session = self._session_factory.create(request.user_id, request.conversation_id)
-            result = await self._runner.run(
-                self._manager_agent,
-                request.message,
-                session=session,
-            )
+            run_config = await self._run_config(session, request.message)
+            if run_config is None:
+                result = await self._runner.run(
+                    self._manager_agent,
+                    request.message,
+                    session=session,
+                )
+            else:
+                result = await self._runner.run(
+                    self._manager_agent,
+                    request.message,
+                    session=session,
+                    run_config=run_config,
+                )
         except SessionError:
             raise
         except Exception as exc:
@@ -106,11 +125,20 @@ class ChatService:
         pending: set[asyncio.Task[Any]] = set()
         try:
             session = self._session_factory.create(request.user_id, request.conversation_id)
-            result = self._runner.run_streamed(
-                self._manager_agent,
-                request.message,
-                session=session,
-            )
+            run_config = await self._run_config(session, request.message)
+            if run_config is None:
+                result = self._runner.run_streamed(
+                    self._manager_agent,
+                    request.message,
+                    session=session,
+                )
+            else:
+                result = self._runner.run_streamed(
+                    self._manager_agent,
+                    request.message,
+                    session=session,
+                    run_config=run_config,
+                )
             outer_events = result.stream_events().__aiter__()
             outer_task: asyncio.Task[Any] | None = asyncio.create_task(anext(outer_events))
             nested_task: asyncio.Task[Any] = asyncio.create_task(nested_queue.get())

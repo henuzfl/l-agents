@@ -76,6 +76,14 @@ python -m pip install -e ".[dev]"
 | `DEEPSEEK_BASE_URL` | OpenAI-compatible 地址 | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | 对话模型 | `deepseek-chat` |
 | `SQLITE_SESSION_PATH` | Manager 会话数据库 | `data/sessions.db` |
+| `SHORT_TERM_MEMORY_ENABLED` | 启用 Manager 自适应短期记忆 | `true` |
+| `SHORT_TERM_CONTEXT_MAX_TOKENS` | 短期记忆估算 Token 上限 | `12000` |
+| `SHORT_TERM_SUMMARY_TARGET_TOKENS` | 滚动摘要目标上限 | `1500` |
+| `SHORT_TERM_RECENT_TURNS` | 优先保留的最近完整轮数 | `6` |
+| `SHORT_TERM_MIN_RECENT_TURNS` | 超限时优先保证的完整轮数 | `2` |
+| `SHORT_TERM_SUMMARY_BATCH_TURNS` | 触发滚动摘要的累计旧轮数 | `4` |
+| `SHORT_TERM_SINGLE_MESSAGE_MAX_TOKENS` | 单条用户消息估算 Token 上限 | `4000` |
+| `SHORT_TERM_FALLBACK_TURNS` | 摘要失败时最多保留的最近轮数 | `10` |
 | `KNOWLEDGE_DATABASE_URL` | PostgreSQL/pgvector 连接地址 | 无 |
 | `KNOWLEDGE_SCHEMA` | 知识库 schema | `agent_knowledge` |
 | `KNOWLEDGE_TABLE` | 向量表 | `project_manual` |

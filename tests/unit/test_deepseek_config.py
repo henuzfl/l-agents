@@ -1,6 +1,8 @@
 from pathlib import Path
 
+import pytest
 from agents import OpenAIChatCompletionsModel
+from pydantic import ValidationError
 
 from app.container import Container
 from app.core.config import Settings
@@ -21,3 +23,9 @@ def test_container_builds_deepseek_chat_completions_model(tmp_path: Path) -> Non
     assert container.agent2.tools == []
     assert container.agent3.tools == []
     assert container.agent4.tools == []
+    assert container.chat_service._memory_optimizer is not None
+
+
+def test_short_term_memory_configuration_rejects_invalid_window() -> None:
+    with pytest.raises(ValidationError, match="MIN_RECENT_TURNS"):
+        Settings(short_term_recent_turns=2, short_term_min_recent_turns=3)
