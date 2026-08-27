@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     qwen_embedding_base_url: str | None = None
     qwen_embedding_model: str = "text-embedding-v4"
     qwen_embedding_dimensions: int = 1024
+    qwen_vision_base_url: str | None = None
+    qwen_vision_model: str = "qwen3-vl-plus"
+    qwen_vision_max_pages: int = 100
+    qwen_vision_max_images: int = 50
     knowledge_top_k: int = 5
     knowledge_upload_max_bytes: int = 10 * 1024 * 1024
     knowledge_registry_path: Path = Path("data/knowledge_documents.db")

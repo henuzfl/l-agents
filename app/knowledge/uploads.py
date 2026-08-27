@@ -3,7 +3,7 @@ from __future__ import annotations
 import mimetypes
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -23,6 +23,7 @@ from app.core.config import Settings
 from app.core.exceptions import KnowledgeConfigurationError, KnowledgeRetrievalError
 
 from .documents import build_document_nodes
+from .pdf_processing import process_pdf
 from .registry import KnowledgeDocumentRegistry
 from .store import KnowledgeStatus, LlamaIndexKnowledgeStore
 
@@ -57,6 +58,8 @@ class DocumentJob:
     created_at: str
     updated_at: str
     error: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    element_counts: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -64,6 +67,8 @@ class DocumentJob:
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> DocumentJob:
         data = dict(payload)
+        data.setdefault("warnings", [])
+        data.setdefault("element_counts", {})
         data["loading"] = PipelineStage(**data["loading"])  # type: ignore[arg-type]
         data["chunking"] = PipelineStage(**data["chunking"])  # type: ignore[arg-type]
         data["embedding"] = PipelineStage(**data["embedding"])  # type: ignore[arg-type]
@@ -121,6 +126,18 @@ class MinioDocumentStorage:
             self._client.remove_object(self._bucket, object_name)
         except Exception as exc:
             raise KnowledgeRetrievalError("MinIO 原始文档删除失败。") from exc
+
+    def delete_assets(self, object_name: str) -> None:
+        asset_prefix = f"{object_name.rsplit('/', 1)[0]}/assets/"
+        try:
+            for item in self._client.list_objects(
+                self._bucket,
+                prefix=asset_prefix,
+                recursive=True,
+            ):
+                self._client.remove_object(self._bucket, item.object_name)
+        except Exception as exc:
+            raise KnowledgeRetrievalError("MinIO 文档图片清理失败。") from exc
 
 
 def extract_document_text(filename: str, content: bytes) -> str:
@@ -260,20 +277,36 @@ class KnowledgeDocumentService:
             self._update(task_id, chunking=PipelineStage("running", "正在提取并切分文本"))
             job = self.get_job(task_id)
             content = self._storage().download(job.object_name)
-            text = extract_document_text(job.filename, content)
-            document = Document(
-                text=text,
-                metadata={
-                    "source": job.filename,
-                    "section": "上传文档",
-                    "minio_bucket": self._storage().bucket,
-                    "minio_object": job.object_name,
-                },
-            )
-            nodes = build_document_nodes(document)
+            if Path(job.filename).suffix.lower() == ".pdf":
+                pdf_result = process_pdf(
+                    content,
+                    job.filename,
+                    job.object_name,
+                    self._settings,
+                    self._storage().upload,
+                )
+                nodes = pdf_result.nodes
+                warnings = pdf_result.warnings
+                element_counts = pdf_result.element_counts
+            else:
+                text = extract_document_text(job.filename, content)
+                document = Document(
+                    text=text,
+                    metadata={
+                        "source": job.filename,
+                        "section": "上传文档",
+                        "minio_bucket": self._storage().bucket,
+                        "minio_object": job.object_name,
+                    },
+                )
+                nodes = build_document_nodes(document)
+                warnings = []
+                element_counts = {"text": len(nodes)}
             self._update(
                 task_id,
                 chunk_count=len(nodes),
+                warnings=warnings,
+                element_counts=element_counts,
                 chunking=PipelineStage("completed", f"已生成 {len(nodes)} 个文本块"),
                 embedding=PipelineStage("running", "正在生成向量并写入索引"),
             )
@@ -314,15 +347,64 @@ class KnowledgeDocumentService:
         content_type = mimetypes.guess_type(job.filename)[0] or "application/octet-stream"
         return job.filename, content_type, self._storage().download(job.object_name)
 
+    def list_chunks(
+        self,
+        task_id: str,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        element_type: str | None = None,
+        query: str | None = None,
+    ) -> dict[str, object]:
+        job = self.get_job(task_id)
+        if job.status != "completed":
+            raise InvalidKnowledgeDocument("文档处理完成后才能查看分片。")
+        total, chunks = self._store_factory(self._settings).list_document_chunks(
+            job.object_name,
+            offset=offset,
+            limit=limit,
+            element_type=element_type,
+            query=query,
+        )
+        return {
+            "task_id": job.task_id,
+            "filename": job.filename,
+            "minio_bucket": self._storage().bucket,
+            "minio_object": job.object_name,
+            "download_url": f"/api/v1/knowledge/documents/{job.task_id}/download",
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "chunks": [
+                {
+                    "position": offset + index,
+                    "node_id": chunk.node_id,
+                    "content": chunk.content,
+                    "page_number": chunk.metadata.get("page_number"),
+                    "section": chunk.metadata.get("section", "上传文档"),
+                    "element_type": chunk.metadata.get("element_type", "text"),
+                    "element_index": chunk.metadata.get("element_index"),
+                    "element_part": chunk.metadata.get("element_part"),
+                    "language": chunk.metadata.get("language"),
+                    "minio_object": chunk.metadata.get("minio_object", job.object_name),
+                    "asset_object": chunk.metadata.get("asset_object"),
+                }
+                for index, chunk in enumerate(chunks, start=1)
+            ],
+        }
+
     def restart(self, task_id: str) -> DocumentJob:
         job = self.get_job(task_id)
         if job.status == "processing":
             raise InvalidKnowledgeDocument("文档正在处理中，不能重复执行。")
         self._store_factory(self._settings).delete_document(job.object_name)
+        self._storage().delete_assets(job.object_name)
         self._update(
             task_id,
             status="processing",
             chunk_count=None,
+            warnings=[],
+            element_counts={},
             chunking=PipelineStage("pending", "后台任务等待开始"),
             embedding=PipelineStage(),
             error=None,
@@ -334,6 +416,7 @@ class KnowledgeDocumentService:
         if job.status == "processing":
             raise InvalidKnowledgeDocument("文档正在处理中，不能删除。")
         self._store_factory(self._settings).delete_document(job.object_name)
+        self._storage().delete_assets(job.object_name)
         self._storage().delete(job.object_name)
         with self._lock:
             self._jobs.pop(task_id, None)

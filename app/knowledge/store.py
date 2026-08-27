@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from llama_index.core import Document, StorageContext, VectorStoreIndex
 from llama_index.core.base.base_retriever import BaseRetriever
@@ -25,6 +26,13 @@ class KnowledgeStatus:
     node_count: int
     embedding_model: str
     embedding_dimensions: int
+
+
+@dataclass(frozen=True)
+class KnowledgeChunk:
+    node_id: str
+    content: str
+    metadata: dict[str, Any]
 
 
 class LlamaIndexKnowledgeStore:
@@ -159,6 +167,54 @@ class LlamaIndexKnowledgeStore:
             embed_model=self.create_embedding_model(),
         )
         return index.as_retriever(similarity_top_k=self._settings.knowledge_top_k)
+
+    def list_document_chunks(
+        self,
+        object_name: str,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        element_type: str | None = None,
+        query: str | None = None,
+    ) -> tuple[int, list[KnowledgeChunk]]:
+        sync_url, _ = self._database_urls()
+        table_name = f"data_{self._settings.knowledge_table}"
+        filters = ["metadata_->>'minio_object' = :object_name"]
+        parameters: dict[str, Any] = {
+            "object_name": object_name,
+            "offset": offset,
+            "limit": limit,
+        }
+        if element_type:
+            filters.append("metadata_->>'element_type' = :element_type")
+            parameters["element_type"] = element_type
+        if query:
+            filters.append("text ILIKE :query")
+            parameters["query"] = f"%{query}%"
+        where_clause = " AND ".join(filters)
+        count_statement = text(
+            f'SELECT COUNT(*) FROM "{self._settings.knowledge_schema}"."{table_name}" '
+            f"WHERE {where_clause}"
+        )
+        rows_statement = text(
+            f'SELECT node_id, text, metadata_ FROM "{self._settings.knowledge_schema}".'
+            f'"{table_name}" WHERE {where_clause} ORDER BY id LIMIT :limit OFFSET :offset'
+        )
+        try:
+            with create_engine(sync_url).connect() as connection:
+                total = int(connection.execute(count_statement, parameters).scalar_one())
+                rows = connection.execute(rows_statement, parameters).mappings().all()
+        except Exception as exc:
+            raise KnowledgeRetrievalError("无法读取文档分片。") from exc
+        chunks = [
+            KnowledgeChunk(
+                node_id=str(row["node_id"]),
+                content=str(row["text"]),
+                metadata=dict(row["metadata_"]) if isinstance(row["metadata_"], dict) else {},
+            )
+            for row in rows
+        ]
+        return total, chunks
 
     def status(self) -> KnowledgeStatus:
         sync_url, _ = self._database_urls()

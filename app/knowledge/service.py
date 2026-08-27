@@ -55,11 +55,15 @@ class KnowledgeSearchService:
         for index, item in enumerate(nodes, start=1):
             source = str(item.node.metadata.get("source", "未知文档"))
             section = str(item.node.metadata.get("section", "未知章节"))
+            element_type = str(item.node.metadata.get("element_type", ""))
+            location = f"{source} > {section}"
+            if element_type:
+                location = f"{location} · {element_type}"
             score = f"{item.score:.4f}" if item.score is not None else "unknown"
             content = item.node.get_content().strip()
             lines.extend(
                 [
-                    f"[{index}] [{source} > {section}] 相关度: {score}",
+                    f"[{index}] [{location}] 相关度: {score}",
                     content,
                 ]
             )

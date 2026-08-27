@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.core.config import Settings
+from app.knowledge.store import KnowledgeChunk
 from app.knowledge.uploads import (
     InvalidKnowledgeDocument,
     KnowledgeDocumentService,
@@ -23,6 +24,18 @@ class FakeStore:
     def delete_document(self, _object_name: str) -> None:
         FakeStore.nodes = []
 
+    def list_document_chunks(
+        self,
+        object_name: str,
+        **_filters: object,
+    ) -> tuple[int, list[KnowledgeChunk]]:
+        chunks = [
+            KnowledgeChunk(node.node_id, node.text, dict(node.metadata))
+            for node in FakeStore.nodes
+            if node.metadata.get("minio_object") == object_name
+        ]
+        return len(chunks), chunks
+
 
 class FakeObjectStorage:
     bucket = "knowledge-documents"
@@ -40,6 +53,11 @@ class FakeObjectStorage:
 
     def delete(self, object_name: str) -> None:
         self.objects.pop(object_name)
+
+    def delete_assets(self, object_name: str) -> None:
+        prefix = f"{object_name.rsplit('/', 1)[0]}/assets/"
+        for name in [name for name in self.objects if name.startswith(prefix)]:
+            self.objects.pop(name)
 
 
 def build_service(tmp_path: Path, **settings: object) -> KnowledgeDocumentService:
@@ -81,6 +99,10 @@ def test_upload_saves_raw_file_before_background_processing(tmp_path: Path) -> N
     assert completed.embedding.state == "completed"
     assert completed.chunk_count == len(FakeStore.nodes)
     assert FakeStore.nodes[0].metadata["minio_object"] == job.object_name
+    relation = service.list_chunks(job.task_id)
+    assert relation["minio_object"] == job.object_name
+    assert relation["total"] == completed.chunk_count
+    assert relation["chunks"][0]["minio_object"] == job.object_name  # type: ignore[index]
 
 
 def test_upload_enforces_configured_size_limit(tmp_path: Path) -> None:
@@ -137,4 +159,7 @@ def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> 
     interrupted = recreated.get_job(job.task_id)
     assert interrupted.status == "failed"
     assert "重新处理" in (interrupted.error or "")
+    asset_name = f"{job.object_name.rsplit('/', 1)[0]}/assets/image.png"
+    storage.objects[asset_name] = b"old image"
     assert recreated.restart(job.task_id).status == "processing"
+    assert asset_name not in storage.objects

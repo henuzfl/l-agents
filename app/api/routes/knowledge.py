@@ -1,7 +1,7 @@
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
@@ -50,6 +50,30 @@ async def download_knowledge_document(
         media_type=content_type,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+@router.get("/documents/{task_id}/chunks")
+async def list_knowledge_document_chunks(
+    task_id: str,
+    service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    element_type: str | None = None,
+    query: str | None = None,
+) -> dict[str, object]:
+    try:
+        return await run_in_threadpool(
+            service.list_chunks,
+            task_id,
+            offset=offset,
+            limit=limit,
+            element_type=element_type,
+            query=query,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="文档不存在。") from exc
+    except InvalidKnowledgeDocument as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/documents/{task_id}/reprocess", status_code=202)
