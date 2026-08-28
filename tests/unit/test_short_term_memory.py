@@ -12,8 +12,19 @@ from app.memory.short_term import (
     SUMMARY_MARKER,
     ShortTermMemoryOptimizer,
     ShortTermMemorySettings,
-    SummaryStore,
+    SummaryState,
 )
+
+
+class InMemorySummaryStore:
+    def __init__(self) -> None:
+        self.states: dict[str, SummaryState] = {}
+
+    async def get(self, session_id: str) -> SummaryState:
+        return self.states.get(session_id, SummaryState())
+
+    async def save(self, session_id: str, state: SummaryState) -> None:
+        self.states[session_id] = state
 
 
 class FakeSummarizer:
@@ -74,7 +85,7 @@ async def test_keeps_short_history_without_summarizing(tmp_path: Path) -> None:
     session = await _session_with_turns(tmp_path / "sessions.db", 3)
     summarizer = FakeSummarizer()
     optimizer = ShortTermMemoryOptimizer(
-        SummaryStore(tmp_path / "sessions.db"), summarizer, _settings()
+        InMemorySummaryStore(), summarizer, _settings()
     )
 
     config = await optimizer.prepare_run_config(session, "当前问题")
@@ -90,7 +101,7 @@ async def test_summarizes_old_turns_and_keeps_six_recent_turns(tmp_path: Path) -
     database = tmp_path / "sessions.db"
     session = await _session_with_turns(database, 10)
     summarizer = FakeSummarizer()
-    store = SummaryStore(database)
+    store = InMemorySummaryStore()
     optimizer = ShortTermMemoryOptimizer(store, summarizer, _settings())
 
     config = await optimizer.prepare_run_config(session, "继续")
@@ -133,7 +144,7 @@ async def test_summary_source_omits_raw_tool_output(tmp_path: Path) -> None:
     await session.add_items(items)
     summarizer = FakeSummarizer()
     optimizer = ShortTermMemoryOptimizer(
-        SummaryStore(database), summarizer, _settings(recent_turns=1)
+        InMemorySummaryStore(), summarizer, _settings(recent_turns=1)
     )
 
     await optimizer.prepare_run_config(session, "继续")
@@ -149,7 +160,7 @@ async def test_oversized_context_is_compacted_beyond_normal_window(tmp_path: Pat
     database = tmp_path / "sessions.db"
     session = await _session_with_turns(database, 6)
     summarizer = FakeSummarizer(result="压缩后的上下文")
-    store = SummaryStore(database)
+    store = InMemorySummaryStore()
     optimizer = ShortTermMemoryOptimizer(
         store,
         summarizer,
@@ -171,7 +182,7 @@ async def test_oversized_context_is_compacted_beyond_normal_window(tmp_path: Pat
 async def test_summary_failure_preserves_request_with_recent_history(tmp_path: Path) -> None:
     database = tmp_path / "sessions.db"
     session = await _session_with_turns(database, 10)
-    store = SummaryStore(database)
+    store = InMemorySummaryStore()
     optimizer = ShortTermMemoryOptimizer(store, FailingSummarizer(), _settings())
 
     config = await optimizer.prepare_run_config(session, "继续")
@@ -188,7 +199,7 @@ async def test_rejects_oversized_current_message(tmp_path: Path) -> None:
     database = tmp_path / "sessions.db"
     session = await _session_with_turns(database, 1)
     optimizer = ShortTermMemoryOptimizer(
-        SummaryStore(database), FakeSummarizer(), _settings(single_message_max_tokens=2)
+        InMemorySummaryStore(), FakeSummarizer(), _settings(single_message_max_tokens=2)
     )
 
     with pytest.raises(SessionError, match="当前消息过长"):
@@ -200,7 +211,7 @@ async def test_rejects_current_run_tool_output_that_exceeds_budget(tmp_path: Pat
     database = tmp_path / "sessions.db"
     session = await _session_with_turns(database, 1)
     optimizer = ShortTermMemoryOptimizer(
-        SummaryStore(database),
+        InMemorySummaryStore(),
         FakeSummarizer(),
         _settings(context_max_tokens=30, single_message_max_tokens=10),
     )

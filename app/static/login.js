@@ -1,0 +1,3 @@
+"use strict";
+const form=document.querySelector("#loginForm"),error=document.querySelector("#loginError"),button=document.querySelector("#loginButton");
+form.addEventListener("submit",async event=>{event.preventDefault();error.hidden=true;button.disabled=true;try{const response=await fetch("/api/v1/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({username:form.username.value.trim(),password:form.password.value})});if(!response.ok)throw new Error("用户名或密码错误。");location.replace("/")}catch(reason){error.textContent=reason instanceof Error?reason.message:"登录失败，请稍后重试。";error.hidden=false}finally{button.disabled=false}});

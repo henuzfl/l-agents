@@ -6,7 +6,6 @@ NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_len
 
 
 class ChatRequest(BaseModel):
-    user_id: NonEmptyString
     conversation_id: NonEmptyString
     message: NonEmptyString
 

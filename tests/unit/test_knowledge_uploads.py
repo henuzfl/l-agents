@@ -70,15 +70,31 @@ class FakeObjectStorage:
             self.objects.pop(name)
 
 
+class FakeRegistry:
+    def __init__(self) -> None:
+        self.items: dict[str, dict[str, object]] = {}
+
+    def save(self, payload):  # type: ignore[no-untyped-def]
+        self.items[str(payload["task_id"])] = dict(payload)
+
+    def get(self, task_id: str):  # type: ignore[no-untyped-def]
+        return self.items.get(task_id)
+
+    def list(self, limit: int = 100):  # type: ignore[no-untyped-def]
+        return list(reversed(list(self.items.values())))[:limit]
+
+    def delete(self, task_id: str) -> None:
+        self.items.pop(task_id, None)
+
+
 def build_service(tmp_path: Path, **settings: object) -> KnowledgeDocumentService:
     return KnowledgeDocumentService(
         Settings(
-            sqlite_session_path=tmp_path / "sessions.db",
-            knowledge_registry_path=tmp_path / "knowledge.db",
             **settings,
         ),
         store_factory=FakeStore,
         object_storage=FakeObjectStorage(),  # type: ignore[arg-type]
+        registry=FakeRegistry(),  # type: ignore[arg-type]
     )
 
 
@@ -123,14 +139,13 @@ def test_upload_enforces_configured_size_limit(tmp_path: Path) -> None:
 
 def test_registry_survives_service_recreation_and_delete_cleans_sources(tmp_path: Path) -> None:
     storage = FakeObjectStorage()
-    settings = Settings(
-        sqlite_session_path=tmp_path / "sessions.db",
-        knowledge_registry_path=tmp_path / "knowledge.db",
-    )
+    settings = Settings()
+    registry = FakeRegistry()
     service = KnowledgeDocumentService(
         settings,
         store_factory=FakeStore,
         object_storage=storage,  # type: ignore[arg-type]
+        registry=registry,  # type: ignore[arg-type]
     )
     job = service.start_upload("manual.txt", b"knowledge", "text/plain")
     service.process(job.task_id)
@@ -139,6 +154,7 @@ def test_registry_survives_service_recreation_and_delete_cleans_sources(tmp_path
         settings,
         store_factory=FakeStore,
         object_storage=storage,  # type: ignore[arg-type]
+        registry=registry,  # type: ignore[arg-type]
     )
     assert recreated.get_job(job.task_id).filename == "manual.txt"
     assert recreated.download(job.task_id)[2] == b"knowledge"
@@ -168,14 +184,13 @@ def test_download_asset_requires_a_chunk_owned_by_the_document(tmp_path: Path) -
 
 def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> None:
     storage = FakeObjectStorage()
-    settings = Settings(
-        sqlite_session_path=tmp_path / "sessions.db",
-        knowledge_registry_path=tmp_path / "knowledge.db",
-    )
+    settings = Settings()
+    registry = FakeRegistry()
     service = KnowledgeDocumentService(
         settings,
         store_factory=FakeStore,
         object_storage=storage,  # type: ignore[arg-type]
+        registry=registry,  # type: ignore[arg-type]
     )
     job = service.start_upload("manual.txt", b"knowledge", "text/plain")
 
@@ -183,7 +198,9 @@ def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> 
         settings,
         store_factory=FakeStore,
         object_storage=storage,  # type: ignore[arg-type]
+        registry=registry,  # type: ignore[arg-type]
     )
+    recreated.recover_interrupted_jobs()
     interrupted = recreated.get_job(job.task_id)
     assert interrupted.status == "failed"
     assert "重新处理" in (interrupted.error or "")

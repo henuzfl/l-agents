@@ -41,8 +41,8 @@ class LlamaIndexKnowledgeStore:
 
     def _validate_configuration(self) -> None:
         missing: list[str] = []
-        if self._settings.knowledge_database_url is None:
-            missing.append("KNOWLEDGE_DATABASE_URL")
+        if self._settings.database_url is None:
+            missing.append("DATABASE_URL")
         if self._settings.dashscope_api_key is None:
             missing.append("DASHSCOPE_API_KEY")
         if not self._settings.qwen_embedding_base_url:
@@ -63,7 +63,7 @@ class LlamaIndexKnowledgeStore:
 
     def _database_urls(self) -> tuple[URL, URL]:
         self._validate_configuration()
-        secret = self._settings.knowledge_database_url
+        secret = self._settings.database_url
         assert secret is not None
         source = make_url(secret.get_secret_value())
         return (

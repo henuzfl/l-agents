@@ -27,7 +27,7 @@
         <nav id="history" class="history" aria-label="历史对话"></nav>
         <div class="sidebar-footer">
           <div class="status"><span></span><div><strong>DeepSeek</strong><small>API 连接模式</small></div></div>
-          <div class="avatar">本地</div>
+          <button class="avatar" type="button" data-logout title="退出登录" style="border:0;cursor:pointer">退出</button>
         </div>
       </aside>
 
@@ -65,6 +65,7 @@
         </div>
       </div>
     </template>
+    <script src="{{ url_for('static', path='/auth.js') }}" defer></script>
     <script src="{{ url_for('static', path='/chat.js') }}" defer></script>
   </body>
 </html>

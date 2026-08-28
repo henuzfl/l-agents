@@ -17,8 +17,8 @@ class FakeRetriever:
         return self.nodes
 
 
-def settings(tmp_path: Path) -> Settings:
-    return Settings(sqlite_session_path=tmp_path / "sessions.db", knowledge_top_k=1)
+def settings(_tmp_path: Path) -> Settings:
+    return Settings(knowledge_top_k=1)
 
 
 @pytest.mark.asyncio

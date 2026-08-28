@@ -1,5 +1,4 @@
 from functools import lru_cache
-from pathlib import Path
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,7 +11,7 @@ class Settings(BaseSettings):
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
-    sqlite_session_path: Path = Path("data/sessions.db")
+    database_url: SecretStr | None = None
     short_term_memory_enabled: bool = True
     short_term_context_max_tokens: int = 12000
     short_term_summary_target_tokens: int = 1500
@@ -21,7 +20,6 @@ class Settings(BaseSettings):
     short_term_summary_batch_turns: int = 4
     short_term_single_message_max_tokens: int = 4000
     short_term_fallback_turns: int = 10
-    knowledge_database_url: SecretStr | None = None
     knowledge_schema: str = "agent_knowledge"
     knowledge_table: str = "project_manual"
     dashscope_api_key: SecretStr | None = None
@@ -34,7 +32,16 @@ class Settings(BaseSettings):
     qwen_vision_max_images: int = 50
     knowledge_top_k: int = 5
     knowledge_upload_max_bytes: int = 10 * 1024 * 1024
-    knowledge_registry_path: Path = Path("data/knowledge_documents.db")
+    jwt_secret_key: SecretStr | None = None
+    jwt_issuer: str = "enterprise-agent"
+    jwt_audience: str = "enterprise-agent-web"
+    access_token_minutes: int = 15
+    refresh_token_days: int = 7
+    refresh_cookie_secure: bool = False
+    seed_demo_users: bool = False
+    demo1_password: SecretStr | None = None
+    demo2_password: SecretStr | None = None
+    demo3_password: SecretStr | None = None
     minio_endpoint: str | None = None
     minio_access_key: str | None = None
     minio_secret_key: SecretStr | None = None
@@ -62,6 +69,13 @@ class Settings(BaseSettings):
             raise ValueError("The short-term summary must be smaller than the context budget.")
         if self.short_term_single_message_max_tokens >= self.short_term_context_max_tokens:
             raise ValueError("A single message must be smaller than the context budget.")
+        if self.access_token_minutes <= 0 or self.refresh_token_days <= 0:
+            raise ValueError("JWT token lifetimes must be positive.")
+        if self.seed_demo_users and any(
+            password is None
+            for password in (self.demo1_password, self.demo2_password, self.demo3_password)
+        ):
+            raise ValueError("SEED_DEMO_USERS requires DEMO1_PASSWORD through DEMO3_PASSWORD.")
         return self
 
 

@@ -13,8 +13,9 @@ PROJECT_MANUAL_SECTIONS: tuple[tuple[str, str], ...] = (
     ),
     (
         "会话记忆",
-        "只有 Manager 使用 SQLite Session。Session ID 格式为 user_id:conversation_id。"
-        "使用相同的 user_id 和 conversation_id 可以继续多轮对话。子 Agent 不创建 Session，"
+        "只有 Manager 使用 PostgreSQL Session。Session ID 格式为 user_id:conversation_id。"
+        "user_id 来自登录身份；使用相同用户和 conversation_id 可以继续多轮对话。"
+        "子 Agent 不创建 Session，"
         "也不能访问 Manager 的历史消息。",
     ),
     (
@@ -38,7 +39,7 @@ PROJECT_MANUAL_SECTIONS: tuple[tuple[str, str], ...] = (
     ),
     (
         "安全配置",
-        "DeepSeek、千问和 PostgreSQL 凭据必须通过 .env 或运行环境提供，不能写入代码或提交到"
+        "DeepSeek、千问、JWT 和 PostgreSQL 凭据必须通过 .env 或运行环境提供，不能写入代码或提交到"
         "版本库。服务启动不会自动创建或重建知识库；管理员必须显式执行知识库 CLI。",
     ),
 )

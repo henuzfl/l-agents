@@ -86,6 +86,13 @@ class FakeKnowledgeDocumentService:
 
 @pytest.mark.asyncio
 async def test_knowledge_page_contains_background_pipeline(client: httpx.AsyncClient) -> None:
+    class WebAuth:
+        async def validate_refresh(self, _token: str) -> None:
+            return None
+
+    app = client._transport.app  # type: ignore[attr-defined]
+    app.state.container.auth_service = WebAuth()
+    client.cookies.set("refresh_token", "test")
     response = await client.get("/knowledge")
     assert response.status_code == 200
     assert "文档列表" in response.text

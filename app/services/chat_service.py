@@ -70,9 +70,9 @@ class ChatService:
             return None
         return await self._memory_optimizer.prepare_run_config(session, message)
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(self, request: ChatRequest, user_id: str) -> ChatResponse:
         try:
-            session = self._session_factory.create(request.user_id, request.conversation_id)
+            session = self._session_factory.create(user_id, request.conversation_id)
             run_config = await self._run_config(session, request.message)
             if run_config is None:
                 result = await self._runner.run(
@@ -97,7 +97,7 @@ class ChatService:
             raise AgentExecutionError("The manager agent returned an empty response.")
         return ChatResponse(conversation_id=request.conversation_id, answer=answer)
 
-    async def stream(self, request: ChatRequest) -> AsyncIterator[dict[str, Any]]:
+    async def stream(self, request: ChatRequest, user_id: str) -> AsyncIterator[dict[str, Any]]:
         started_at = time.monotonic()
         mapper = SafeTraceMapper(started_at)
         yield {
@@ -124,7 +124,7 @@ class ChatService:
         result: StreamingRunResultLike | None = None
         pending: set[asyncio.Task[Any]] = set()
         try:
-            session = self._session_factory.create(request.user_id, request.conversation_id)
+            session = self._session_factory.create(user_id, request.conversation_id)
             run_config = await self._run_config(session, request.message)
             if run_config is None:
                 result = self._runner.run_streamed(

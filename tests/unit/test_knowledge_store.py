@@ -7,10 +7,9 @@ from app.core.exceptions import KnowledgeConfigurationError
 from app.knowledge.store import LlamaIndexKnowledgeStore
 
 
-def base_settings(tmp_path: Path, **overrides: object) -> Settings:
+def base_settings(_tmp_path: Path, **overrides: object) -> Settings:
     values: dict[str, object] = {
-        "sqlite_session_path": tmp_path / "sessions.db",
-        "knowledge_database_url": "postgresql://user:password@example.com/database",
+        "database_url": "postgresql://user:password@example.com/database",
         "dashscope_api_key": "test-key",
         "qwen_embedding_base_url": "https://workspace.example.com/compatible-mode/v1",
         "qwen_embedding_dimensions": 1024,
@@ -27,13 +26,13 @@ def test_qwen_embedding_configuration_uses_1024_dimensions(tmp_path: Path) -> No
 
 def test_store_requires_all_external_configuration(tmp_path: Path) -> None:
     settings = Settings(
-        sqlite_session_path=tmp_path / "sessions.db",
-        knowledge_database_url=None,
+        database_url=None,
         dashscope_api_key=None,
         qwen_embedding_base_url=None,
+        _env_file=None,
     )
     store = LlamaIndexKnowledgeStore(settings)
-    with pytest.raises(KnowledgeConfigurationError, match="KNOWLEDGE_DATABASE_URL"):
+    with pytest.raises(KnowledgeConfigurationError, match="DATABASE_URL"):
         store.create_vector_store()
 
 

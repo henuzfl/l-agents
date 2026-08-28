@@ -18,6 +18,7 @@ from llama_index.core import Document
 from minio import Minio
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
+from sqlalchemy.engine import Engine
 
 from app.core.config import Settings
 from app.core.exceptions import KnowledgeConfigurationError, KnowledgeRetrievalError
@@ -176,13 +177,18 @@ class KnowledgeDocumentService:
         store_factory: StoreFactory = LlamaIndexKnowledgeStore,
         object_storage: MinioDocumentStorage | None = None,
         registry: KnowledgeDocumentRegistry | None = None,
+        database_engine: Engine | None = None,
     ) -> None:
         self._settings = settings
         self._store_factory = store_factory
         self._object_storage = object_storage
-        self._registry = registry or KnowledgeDocumentRegistry(settings.knowledge_registry_path)
+        if registry is None and database_engine is None:
+            raise ValueError("database_engine is required when registry is not provided")
+        self._registry = registry or KnowledgeDocumentRegistry(database_engine)  # type: ignore[arg-type]
         self._jobs: dict[str, DocumentJob] = {}
         self._lock = Lock()
+
+    def recover_interrupted_jobs(self) -> None:
         self._recover_interrupted_jobs()
 
     @property

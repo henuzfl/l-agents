@@ -6,6 +6,7 @@ import pytest
 from agents import Agent, RawResponsesStreamEvent
 from agents.memory import Session
 from openai.types.responses import ResponseTextDeltaEvent
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.memory import SessionFactory
 from app.schemas import ChatRequest
@@ -91,17 +92,18 @@ class FakeStreamingRunner(FakeRunner):
 async def test_chat_service_passes_session_only_to_manager_run(tmp_path: Path) -> None:
     runner = FakeRunner()
     manager = Agent(name="manager", model="test-model")
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'sessions.db'}")
     service = ChatService(
         manager,
-        SessionFactory(tmp_path / "sessions.db"),
+        SessionFactory(engine),
         runner,
     )
     response = await service.chat(
         ChatRequest(
-            user_id="user-001",
             conversation_id="conversation-001",
             message="请调用知识检索 Agent",
-        )
+        ),
+        "user-001",
     )
     assert runner.session is not None
     assert runner.session.session_id == "user-001:conversation-001"
@@ -112,16 +114,17 @@ async def test_chat_service_passes_session_only_to_manager_run(tmp_path: Path) -
 async def test_chat_service_streams_deltas_and_final_answer(tmp_path: Path) -> None:
     runner = FakeStreamingRunner()
     manager = Agent(name="manager", model="test-model")
-    service = ChatService(manager, SessionFactory(tmp_path / "sessions.db"), runner)
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'sessions.db'}")
+    service = ChatService(manager, SessionFactory(engine), runner)
 
     events = [
         event
         async for event in service.stream(
             ChatRequest(
-                user_id="user-001",
                 conversation_id="conversation-stream",
                 message="请流式回答",
-            )
+            ),
+            "user-001",
         )
     ]
 

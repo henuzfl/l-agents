@@ -1,7 +1,6 @@
 "use strict";
 
-const STORAGE_KEY = "agent-desk-conversations";
-const USER_ID = "web-user";
+let STORAGE_KEY = "agent-desk-conversations";
 const state = {
   conversations: [],
   activeId: "",
@@ -328,7 +327,7 @@ async function sendMessage(prefill) {
     const response = await fetch("/api/v1/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: USER_ID, conversation_id: conversation.id, message: content }),
+      body: JSON.stringify({ conversation_id: conversation.id, message: content }),
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -391,12 +390,17 @@ document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); createConversation(); }
 });
 
-try { state.conversations = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { state.conversations = []; }
-state.conversations.forEach((conversation) => conversation.messages.forEach((message) => {
-  if (message.traceStatus === "running") {
-    message.traceStatus = "interrupted";
-    message.traceOpen = false;
-  }
-}));
-if (state.conversations[0]) state.activeId = state.conversations[0].id; else createConversation();
-render();
+document.querySelector("[data-logout]").addEventListener("click", () => window.logout());
+window.authReady.then((user) => {
+  if (!user) return;
+  STORAGE_KEY = `agent-desk-conversations:${user.id}`;
+  try { state.conversations = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { state.conversations = []; }
+  state.conversations.forEach((conversation) => conversation.messages.forEach((message) => {
+    if (message.traceStatus === "running") {
+      message.traceStatus = "interrupted";
+      message.traceOpen = false;
+    }
+  }));
+  if (state.conversations[0]) state.activeId = state.conversations[0].id; else createConversation();
+  render();
+});

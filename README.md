@@ -7,17 +7,18 @@
 ```mermaid
 flowchart TD
     UI[Chat / Knowledge UI] --> API[FastAPI]
-    API --> M[manager / SQLite Session]
+    API --> M[manager / PostgreSQL Session]
     M -->|run_knowledge_agent| KA[knowledge_agent / stateless RAG]
     M -->|run_agent2—4| A[stateless child agents]
     KA --> PG[(PostgreSQL + pgvector)]
-    API --> REG[(SQLite document registry)]
+    API --> REG[(PostgreSQL document registry)]
     API --> OBJ[Local storage / MinIO]
 ```
 
 ## 功能
 
-- Manager 独占 `SQLiteSession`，同一 `{user_id}:{conversation_id}` 可复用多轮上下文。
+- Manager 独占 PostgreSQL `SQLAlchemySession`，登录用户与 conversation ID 共同隔离上下文。
+- JWT Bearer access token 保护聊天与知识库 API，HttpOnly refresh token 支持轮换续期。
 - 子 Agent 通过 `Agent.as_tool()` 注册并保持无状态，不读取 Manager 历史。
 - `knowledge_agent` 是唯一拥有 `search_knowledge_base` 工具的子 Agent。
 - `POST /api/v1/chat/stream` 以 SSE 返回执行阶段、Agent 调用轨迹和最终回答。
@@ -45,7 +46,7 @@ app/
 ├── api/routes/             # chat、knowledge、health 与页面路由
 ├── core/                   # 配置、日志与应用异常
 ├── knowledge/              # pgvector、上传、注册表与 PDF 处理
-├── memory/                 # Manager SQLite Session
+├── memory/                 # Manager PostgreSQL Session 与短期摘要
 ├── schemas/
 ├── services/               # 编排、SSE 和执行事件
 ├── static/
@@ -75,7 +76,13 @@ python -m pip install -e ".[dev]"
 | `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | 无 |
 | `DEEPSEEK_BASE_URL` | OpenAI-compatible 地址 | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | 对话模型 | `deepseek-chat` |
-| `SQLITE_SESSION_PATH` | Manager 会话数据库 | `data/sessions.db` |
+| `DATABASE_URL` | PostgreSQL 业务数据库连接；业务表位于 `app` schema | 无 |
+| `JWT_SECRET_KEY` | JWT 签名密钥 | 无 |
+| `ACCESS_TOKEN_MINUTES` | Access token 有效分钟数 | `15` |
+| `REFRESH_TOKEN_DAYS` | Refresh token 有效天数 | `7` |
+| `REFRESH_COOKIE_SECURE` | 是否只通过 HTTPS 发送 refresh cookie | `false` |
+| `SEED_DEMO_USERS` | 启动时幂等写入 demo1～demo3 | `false` |
+| `DEMO1_PASSWORD`～`DEMO3_PASSWORD` | 三个模拟用户密码 | 无 |
 | `SHORT_TERM_MEMORY_ENABLED` | 启用 Manager 自适应短期记忆 | `true` |
 | `SHORT_TERM_CONTEXT_MAX_TOKENS` | 短期记忆估算 Token 上限 | `12000` |
 | `SHORT_TERM_SUMMARY_TARGET_TOKENS` | 滚动摘要目标上限 | `1500` |
@@ -84,7 +91,6 @@ python -m pip install -e ".[dev]"
 | `SHORT_TERM_SUMMARY_BATCH_TURNS` | 触发滚动摘要的累计旧轮数 | `4` |
 | `SHORT_TERM_SINGLE_MESSAGE_MAX_TOKENS` | 单条用户消息估算 Token 上限 | `4000` |
 | `SHORT_TERM_FALLBACK_TURNS` | 摘要失败时最多保留的最近轮数 | `10` |
-| `KNOWLEDGE_DATABASE_URL` | PostgreSQL/pgvector 连接地址 | 无 |
 | `KNOWLEDGE_SCHEMA` | 知识库 schema | `agent_knowledge` |
 | `KNOWLEDGE_TABLE` | 向量表 | `project_manual` |
 | `DASHSCOPE_API_KEY` | 千问嵌入与视觉模型密钥 | 无 |
@@ -97,7 +103,6 @@ python -m pip install -e ".[dev]"
 | `QWEN_VISION_MAX_IMAGES` | 单文档最多理解图片数 | `50` |
 | `KNOWLEDGE_TOP_K` | 默认检索节点数 | `5` |
 | `KNOWLEDGE_UPLOAD_MAX_BYTES` | 单文件上传上限 | `10485760` |
-| `KNOWLEDGE_REGISTRY_PATH` | 文档任务注册表 | `data/knowledge_documents.db` |
 | `MINIO_ENDPOINT` | MinIO 地址；为空时使用本地存储 | 无 |
 | `MINIO_ACCESS_KEY` | MinIO Access Key | 无 |
 | `MINIO_SECRET_KEY` | MinIO Secret Key | 无 |
@@ -107,6 +112,14 @@ python -m pip install -e ".[dev]"
 导入应用和离线测试不要求外部凭据；真实聊天、索引处理与视觉识别会访问对应外部服务。
 
 ## 知识库初始化
+
+首次启动新版本前先创建 PostgreSQL 业务 schema 和表：
+
+```bash
+alembic upgrade head
+```
+
+旧的 `data/sessions.db` 和 `data/knowledge_documents.db` 不会导入或删除，新版本不再读取。
 
 服务启动不会自动重建 pgvector 索引。首次部署时显式执行：
 
@@ -130,6 +143,15 @@ python -m app.knowledge.cli rebuild
 uvicorn app.main:app --reload --port 8091
 ```
 
+启用模拟用户后，可使用 `demo1`、`demo2` 或 `demo3` 及各自环境变量密码登录。
+API 客户端先调用登录接口：
+
+```bash
+curl -c cookies.txt -X POST http://127.0.0.1:8091/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo1","password":"<DEMO1_PASSWORD>"}'
+```
+
 - 聊天页面：`http://127.0.0.1:8091/`
 - 知识库管理：`http://127.0.0.1:8091/knowledge`
 - API 文档：`http://127.0.0.1:8091/docs`
@@ -139,16 +161,18 @@ uvicorn app.main:app --reload --port 8091
 
 ```bash
 curl -X POST http://127.0.0.1:8091/api/v1/chat \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"user-001","conversation_id":"conversation-001","message":"查询项目知识"}'
+  -d '{"conversation_id":"conversation-001","message":"查询项目知识"}'
 ```
 
 流式聊天请求：
 
 ```bash
 curl -N -X POST http://127.0.0.1:8091/api/v1/chat/stream \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"user-001","conversation_id":"conversation-001","message":"查询项目知识"}'
+  -d '{"conversation_id":"conversation-001","message":"查询项目知识"}'
 ```
 
 上传文档：

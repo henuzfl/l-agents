@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Protocol
 
 import tiktoken
@@ -15,8 +13,12 @@ from agents.items import TResponseInputItem
 from agents.memory import Session
 from agents.run_config import CallModelData, ModelInputData
 from openai import AsyncOpenAI
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.exceptions import SessionError
+from app.db_models import MemorySummaryRecord
 
 SUMMARY_MARKER = "[短期记忆摘要]"
 
@@ -93,51 +95,33 @@ class SummaryState:
 
 
 class SummaryStore:
-    def __init__(self, database_path: Path) -> None:
-        self._database_path = database_path
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        self._session_maker = session_maker
 
     async def get(self, session_id: str) -> SummaryState:
-        return await asyncio.to_thread(self._get_sync, session_id)
+        async with self._session_maker() as session:
+            record = await session.scalar(
+                select(MemorySummaryRecord).where(MemorySummaryRecord.session_id == session_id)
+            )
+        return (
+            SummaryState(record.summary, record.summarized_turns)
+            if record is not None
+            else SummaryState()
+        )
 
     async def save(self, session_id: str, state: SummaryState) -> None:
-        await asyncio.to_thread(self._save_sync, session_id, state)
-
-    def _connect(self) -> sqlite3.Connection:
-        self._database_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self._database_path)
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS agent_memory_summaries (
-                session_id TEXT PRIMARY KEY,
-                summary TEXT NOT NULL,
-                summarized_turns INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
+        statement = insert(MemorySummaryRecord).values(
+            session_id=session_id,
+            summary=state.summary,
+            summarized_turns=state.summarized_turns,
         )
-        return connection
-
-    def _get_sync(self, session_id: str) -> SummaryState:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT summary, summarized_turns FROM agent_memory_summaries WHERE session_id = ?",
-                (session_id,),
-            ).fetchone()
-        return SummaryState(*row) if row else SummaryState()
-
-    def _save_sync(self, session_id: str, state: SummaryState) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO agent_memory_summaries(session_id, summary, summarized_turns)
-                VALUES (?, ?, ?)
-                ON CONFLICT(session_id) DO UPDATE SET
-                    summary = excluded.summary,
-                    summarized_turns = excluded.summarized_turns,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (session_id, state.summary, state.summarized_turns),
-            )
+        statement = statement.on_conflict_do_update(
+            index_elements=[MemorySummaryRecord.session_id],
+            set_={"summary": state.summary, "summarized_turns": state.summarized_turns},
+        )
+        async with self._session_maker() as session:
+            await session.execute(statement)
+            await session.commit()
 
 
 @dataclass(frozen=True)

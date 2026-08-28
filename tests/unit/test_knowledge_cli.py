@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from app.core.config import Settings
@@ -22,8 +20,8 @@ class FakeStore:
         return KnowledgeStatus("agent_knowledge", "project_manual", 6, "text-embedding-v4", 1024)
 
 
-def test_cli_commands_return_actionable_messages(tmp_path: Path) -> None:
-    settings = Settings(sqlite_session_path=tmp_path / "sessions.db")
+def test_cli_commands_return_actionable_messages() -> None:
+    settings = Settings()
     assert "初始化完成" in run_command("init", settings, FakeStore)  # type: ignore[arg-type]
     assert "6 个节点" in run_command("rebuild", settings, FakeStore)  # type: ignore[arg-type]
     assert "agent_knowledge.project_manual" in run_command(
@@ -31,12 +29,12 @@ def test_cli_commands_return_actionable_messages(tmp_path: Path) -> None:
     )
 
 
-def test_default_store_reports_missing_configuration(tmp_path: Path) -> None:
+def test_default_store_reports_missing_configuration() -> None:
     settings = Settings(
-        sqlite_session_path=tmp_path / "sessions.db",
-        knowledge_database_url=None,
+        database_url=None,
         dashscope_api_key=None,
         qwen_embedding_base_url=None,
+        _env_file=None,
     )
     with pytest.raises(KnowledgeConfigurationError):
         run_command("init", settings)

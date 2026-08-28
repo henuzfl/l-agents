@@ -5,10 +5,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app.api.dependencies import get_knowledge_document_service
+from app.api.dependencies import get_current_user, get_knowledge_document_service
 from app.knowledge import InvalidKnowledgeDocument, KnowledgeDocumentService
 
-router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
+router = APIRouter(
+    prefix="/api/v1/knowledge",
+    tags=["knowledge"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/status")

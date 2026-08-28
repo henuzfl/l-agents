@@ -5,7 +5,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.api.dependencies import get_chat_service
+from app.api.dependencies import get_chat_service, get_current_user
+from app.auth import AuthenticatedUser
 from app.schemas import ChatRequest, ChatResponse
 from app.services import ChatService
 
@@ -24,17 +25,19 @@ def encode_sse(payload: dict[str, Any]) -> str:
 async def chat(
     request: ChatRequest,
     service: Annotated[ChatService, Depends(get_chat_service)],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> ChatResponse:
-    return await service.chat(request)
+    return await service.chat(request, str(user.id))
 
 
 @router.post("/chat/stream", response_class=StreamingResponse)
 async def chat_stream(
     request: ChatRequest,
     service: Annotated[ChatService, Depends(get_chat_service)],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> StreamingResponse:
     async def events() -> AsyncIterator[str]:
-        async for payload in service.stream(request):
+        async for payload in service.stream(request, str(user.id)):
             yield encode_sse(payload)
 
     return StreamingResponse(

@@ -11,7 +11,7 @@
     <aside id="sidebar" class="sidebar">
       <div class="brand"><div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span>Agent Desk</span></div>
       <nav class="main-nav knowledge-nav" aria-label="主菜单"><a class="main-nav-link" href="/"><span>◌</span>对话</a><a class="main-nav-link active" href="/knowledge"><span>◇</span>知识库</a></nav>
-      <div class="sidebar-spacer"></div><div class="sidebar-footer"><div class="status"><span></span><div><strong>Knowledge</strong><small>pgvector 索引</small></div></div><div class="avatar">本地</div></div>
+      <div class="sidebar-spacer"></div><div class="sidebar-footer"><div class="status"><span></span><div><strong>Knowledge</strong><small>pgvector 索引</small></div></div><button class="avatar" type="button" data-logout title="退出登录" style="border:0;cursor:pointer">退出</button></div>
     </aside>
     <main class="knowledge-workspace">
       <header class="knowledge-header"><div><p class="eyebrow">Knowledge workspace</p><h1>文档库</h1><p class="header-description">管理知识来源、处理状态与分片关系。</p></div><div class="header-actions"><div id="knowledgeState" class="knowledge-state"><span class="live-dot"></span><b>正在读取状态…</b></div><button id="openUploadButton" class="upload-trigger" type="button"><span>＋</span>上传文档</button></div></header>
@@ -32,5 +32,5 @@
       </section></div>
       <div id="imagePreviewDialog" class="image-preview-dialog" hidden><button class="image-preview-backdrop" type="button" data-close-image aria-label="关闭图片预览"></button><section class="image-preview-card" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle"><header><div><p class="summary-label">Chunk asset</p><h2 id="imagePreviewTitle">分片图片</h2></div><button id="closeImagePreview" type="button" aria-label="关闭图片预览">关闭</button></header><figure><img id="imagePreview" alt="分片图片大图"><figcaption id="imagePreviewCaption"></figcaption></figure></section></div>
     </main>
-  </div><script src="{{ url_for('static', path='/knowledge.js') }}?v=20260827.2" defer></script></body>
+  </div><script src="{{ url_for('static', path='/auth.js') }}" defer></script><script src="{{ url_for('static', path='/knowledge.js') }}?v=20260827.3" defer></script></body>
 </html>
