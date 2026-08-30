@@ -74,16 +74,16 @@ class FakeRegistry:
     def __init__(self) -> None:
         self.items: dict[str, dict[str, object]] = {}
 
-    def save(self, payload):  # type: ignore[no-untyped-def]
+    async def save(self, payload):  # type: ignore[no-untyped-def]
         self.items[str(payload["task_id"])] = dict(payload)
 
-    def get(self, task_id: str):  # type: ignore[no-untyped-def]
+    async def get(self, task_id: str):  # type: ignore[no-untyped-def]
         return self.items.get(task_id)
 
-    def list(self, limit: int = 100):  # type: ignore[no-untyped-def]
+    async def list(self, limit: int = 100):  # type: ignore[no-untyped-def]
         return list(reversed(list(self.items.values())))[:limit]
 
-    def delete(self, task_id: str) -> None:
+    async def delete(self, task_id: str) -> None:
         self.items.pop(task_id, None)
 
 
@@ -109,35 +109,40 @@ def test_rejects_unsupported_or_empty_document() -> None:
         extract_document_text("empty.txt", b"  ")
 
 
-def test_upload_saves_raw_file_before_background_processing(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_upload_saves_raw_file_before_background_processing(tmp_path: Path) -> None:
     service = build_service(tmp_path)
-    job = service.start_upload("../manual.txt", "知识正文".encode(), "text/plain")
+    job = await service.start_upload("../manual.txt", "知识正文".encode(), "text/plain")
 
     assert job.filename == "manual.txt"
     assert job.loading.state == "completed"
     assert job.chunking.state == "pending"
     assert FakeObjectStorage.objects[job.object_name] == "知识正文".encode()
 
-    service.process(job.task_id)
-    completed = service.get_job(job.task_id)
+    await service.process(job.task_id)
+    completed = await service.get_job(job.task_id)
     assert completed.status == "completed"
     assert completed.chunking.state == "completed"
     assert completed.embedding.state == "completed"
     assert completed.chunk_count == len(FakeStore.nodes)
     assert FakeStore.nodes[0].metadata["minio_object"] == job.object_name
-    relation = service.list_chunks(job.task_id)
+    relation = await service.list_chunks(job.task_id)
     assert relation["minio_object"] == job.object_name
     assert relation["total"] == completed.chunk_count
     assert relation["chunks"][0]["minio_object"] == job.object_name  # type: ignore[index]
 
 
-def test_upload_enforces_configured_size_limit(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_upload_enforces_configured_size_limit(tmp_path: Path) -> None:
     service = build_service(tmp_path, knowledge_upload_max_bytes=3)
     with pytest.raises(InvalidKnowledgeDocument, match="不能超过"):
-        service.start_upload("manual.txt", b"1234", "text/plain")
+        await service.start_upload("manual.txt", b"1234", "text/plain")
 
 
-def test_registry_survives_service_recreation_and_delete_cleans_sources(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_registry_survives_service_recreation_and_delete_cleans_sources(
+    tmp_path: Path,
+) -> None:
     storage = FakeObjectStorage()
     settings = Settings()
     registry = FakeRegistry()
@@ -147,8 +152,8 @@ def test_registry_survives_service_recreation_and_delete_cleans_sources(tmp_path
         object_storage=storage,  # type: ignore[arg-type]
         registry=registry,  # type: ignore[arg-type]
     )
-    job = service.start_upload("manual.txt", b"knowledge", "text/plain")
-    service.process(job.task_id)
+    job = await service.start_upload("manual.txt", b"knowledge", "text/plain")
+    await service.process(job.task_id)
 
     recreated = KnowledgeDocumentService(
         settings,
@@ -156,33 +161,35 @@ def test_registry_survives_service_recreation_and_delete_cleans_sources(tmp_path
         object_storage=storage,  # type: ignore[arg-type]
         registry=registry,  # type: ignore[arg-type]
     )
-    assert recreated.get_job(job.task_id).filename == "manual.txt"
-    assert recreated.download(job.task_id)[2] == b"knowledge"
+    assert (await recreated.get_job(job.task_id)).filename == "manual.txt"
+    assert (await recreated.download(job.task_id))[2] == b"knowledge"
 
-    recreated.delete(job.task_id)
-    assert recreated.list_jobs() == []
+    await recreated.delete(job.task_id)
+    assert await recreated.list_jobs() == []
     assert storage.objects == {}
 
 
-def test_download_asset_requires_a_chunk_owned_by_the_document(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_download_asset_requires_a_chunk_owned_by_the_document(tmp_path: Path) -> None:
     service = build_service(tmp_path)
-    job = service.start_upload("manual.md", b"# Knowledge", "text/markdown")
-    service.process(job.task_id)
+    job = await service.start_upload("manual.md", b"# Knowledge", "text/markdown")
+    await service.process(job.task_id)
     node = FakeStore.nodes[0]
     asset_name = f"{job.object_name.rsplit('/', 1)[0]}/assets/diagram.png"
     node.metadata["asset_object"] = asset_name
     FakeObjectStorage.objects[asset_name] = b"image-content"
 
-    filename, content_type, content = service.download_asset(job.task_id, node.node_id)
+    filename, content_type, content = await service.download_asset(job.task_id, node.node_id)
 
     assert filename == "diagram.png"
     assert content_type == "image/png"
     assert content == b"image-content"
     with pytest.raises(KeyError):
-        service.download_asset(job.task_id, "missing-node")
+        await service.download_asset(job.task_id, "missing-node")
 
 
-def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> None:
     storage = FakeObjectStorage()
     settings = Settings()
     registry = FakeRegistry()
@@ -192,7 +199,7 @@ def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> 
         object_storage=storage,  # type: ignore[arg-type]
         registry=registry,  # type: ignore[arg-type]
     )
-    job = service.start_upload("manual.txt", b"knowledge", "text/plain")
+    job = await service.start_upload("manual.txt", b"knowledge", "text/plain")
 
     recreated = KnowledgeDocumentService(
         settings,
@@ -200,11 +207,11 @@ def test_service_restart_marks_interrupted_job_reprocessable(tmp_path: Path) -> 
         object_storage=storage,  # type: ignore[arg-type]
         registry=registry,  # type: ignore[arg-type]
     )
-    recreated.recover_interrupted_jobs()
-    interrupted = recreated.get_job(job.task_id)
+    await recreated.recover_interrupted_jobs()
+    interrupted = await recreated.get_job(job.task_id)
     assert interrupted.status == "failed"
     assert "重新处理" in (interrupted.error or "")
     asset_name = f"{job.object_name.rsplit('/', 1)[0]}/assets/image.png"
     storage.objects[asset_name] = b"old image"
-    assert recreated.restart(job.task_id).status == "processing"
+    assert (await recreated.restart(job.task_id)).status == "processing"
     assert asset_name not in storage.objects

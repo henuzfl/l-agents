@@ -1,12 +1,13 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.auth import AuthenticatedUser, AuthenticationError, AuthService
-from app.container import Container
+from app.auth import AuthenticatedUser, AuthService
+from app.auth.dependencies import authenticate_bearer
+from app.bootstrap import Container
+from app.chat import ChatService
 from app.knowledge import KnowledgeDocumentService
-from app.services import ChatService
 
 
 def get_container(request: Request) -> Container:
@@ -28,12 +29,7 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> AuthenticatedUser:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(status_code=401, detail="需要登录。")
-    try:
-        return await service.current_user(credentials.credentials)
-    except AuthenticationError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return await authenticate_bearer(credentials, service)
 
 
 def get_knowledge_document_service(request: Request) -> KnowledgeDocumentService:

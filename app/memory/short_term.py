@@ -13,12 +13,10 @@ from agents.items import TResponseInputItem
 from agents.memory import Session
 from agents.run_config import CallModelData, ModelInputData
 from openai import AsyncOpenAI
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.exceptions import SessionError
-from app.db_models import MemorySummaryRecord
+from app.repositories.memory_summaries import MemorySummary, MemorySummaryRepository
 
 SUMMARY_MARKER = "[短期记忆摘要]"
 
@@ -95,33 +93,25 @@ class SummaryState:
 
 
 class SummaryStore:
-    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
-        self._session_maker = session_maker
+    def __init__(
+        self,
+        session_maker: async_sessionmaker[AsyncSession] | None = None,
+        *,
+        repository: MemorySummaryRepository | None = None,
+    ) -> None:
+        if repository is None and session_maker is None:
+            raise ValueError("session_maker or repository is required")
+        self._repository = repository or MemorySummaryRepository(session_maker)  # type: ignore[arg-type]
 
     async def get(self, session_id: str) -> SummaryState:
-        async with self._session_maker() as session:
-            record = await session.scalar(
-                select(MemorySummaryRecord).where(MemorySummaryRecord.session_id == session_id)
-            )
-        return (
-            SummaryState(record.summary, record.summarized_turns)
-            if record is not None
-            else SummaryState()
-        )
+        record = await self._repository.get(session_id)
+        return SummaryState(record.summary, record.summarized_turns)
 
     async def save(self, session_id: str, state: SummaryState) -> None:
-        statement = insert(MemorySummaryRecord).values(
-            session_id=session_id,
-            summary=state.summary,
-            summarized_turns=state.summarized_turns,
+        await self._repository.save(
+            session_id,
+            MemorySummary(state.summary, state.summarized_turns),
         )
-        statement = statement.on_conflict_do_update(
-            index_elements=[MemorySummaryRecord.session_id],
-            set_={"summary": state.summary, "summarized_turns": state.summarized_turns},
-        )
-        async with self._session_maker() as session:
-            await session.execute(statement)
-            await session.commit()
 
 
 @dataclass(frozen=True)

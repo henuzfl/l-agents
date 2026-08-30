@@ -8,6 +8,7 @@ from agents.memory import Session
 from openai.types.responses import ResponseTextDeltaEvent
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.knowledge.retrieval.events import publish_retrieval_evidence
 from app.memory import SessionFactory
 from app.schemas import ChatRequest
 from app.services import ChatService
@@ -33,6 +34,19 @@ class FakeRunner:
         assert starting_agent.name == "manager"
         assert input == "请调用知识检索 Agent"
         self.session = session
+        await publish_retrieval_evidence(
+            [
+                {
+                    "node_id": "node-1",
+                    "source": "manual.pdf",
+                    "section": "上传文档",
+                    "page_number": 1,
+                    "element_type": "image",
+                    "content": "流程图",
+                    "asset_url": "/api/v1/knowledge/documents/task-1/chunks/node-1/asset",
+                }
+            ]
+        )
         return FakeResult("这是知识检索 Agent 的返回结果。")
 
 
@@ -43,6 +57,19 @@ class FakeStreamingResult:
         self.cancelled = False
 
     async def stream_events(self):  # type: ignore[no-untyped-def]
+        await publish_retrieval_evidence(
+            [
+                {
+                    "node_id": "node-stream",
+                    "source": "manual.pdf",
+                    "section": "上传文档",
+                    "page_number": 2,
+                    "element_type": "image",
+                    "content": "流式图片",
+                    "asset_url": "/api/v1/knowledge/documents/task-1/chunks/node-stream/asset",
+                }
+            ]
+        )
         yield RawResponsesStreamEvent(
             data=ResponseTextDeltaEvent(
                 content_index=0,
@@ -108,6 +135,7 @@ async def test_chat_service_passes_session_only_to_manager_run(tmp_path: Path) -
     assert runner.session is not None
     assert runner.session.session_id == "user-001:conversation-001"
     assert response.answer == "这是知识检索 Agent 的返回结果。"
+    assert [item.node_id for item in response.evidence] == ["node-1"]
 
 
 @pytest.mark.asyncio
@@ -135,3 +163,4 @@ async def test_chat_service_streams_deltas_and_final_answer(tmp_path: Path) -> N
     assert "PRIVATE" not in str(events)
     assert events[-1]["type"] == "done"
     assert events[-1]["answer"] == "流式回答"
+    assert [item["node_id"] for item in events[-1]["evidence"]] == ["node-stream"]

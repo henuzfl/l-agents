@@ -3,7 +3,6 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import get_current_user, get_knowledge_document_service
 from app.knowledge import InvalidKnowledgeDocument, KnowledgeDocumentService
@@ -19,14 +18,14 @@ router = APIRouter(
 async def knowledge_status(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> dict[str, int | str]:
-    return await run_in_threadpool(service.status)
+    return await service.status()
 
 
 @router.get("/documents")
 async def list_knowledge_documents(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> list[dict[str, object]]:
-    return service.list_jobs()
+    return await service.list_jobs()
 
 
 @router.get("/documents/{task_id}")
@@ -35,7 +34,8 @@ async def get_knowledge_document_job(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> dict[str, object]:
     try:
-        return service.get_job(task_id).to_dict()
+        job = await service.get_job(task_id)
+        return job.to_dict()
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="处理任务不存在。") from exc
 
@@ -46,7 +46,7 @@ async def download_knowledge_document(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> Response:
     try:
-        filename, content_type, content = await run_in_threadpool(service.download, task_id)
+        filename, content_type, content = await service.download(task_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="文档不存在。") from exc
     return Response(
@@ -66,8 +66,7 @@ async def list_knowledge_document_chunks(
     query: str | None = None,
 ) -> dict[str, object]:
     try:
-        return await run_in_threadpool(
-            service.list_chunks,
+        return await service.list_chunks(
             task_id,
             offset=offset,
             limit=limit,
@@ -87,8 +86,7 @@ async def view_knowledge_chunk_asset(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> Response:
     try:
-        filename, content_type, content = await run_in_threadpool(
-            service.download_asset,
+        filename, content_type, content = await service.download_asset(
             task_id,
             node_id,
         )
@@ -113,7 +111,7 @@ async def reprocess_knowledge_document(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> dict[str, object]:
     try:
-        job = await run_in_threadpool(service.restart, task_id)
+        job = await service.restart(task_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="文档不存在。") from exc
     except InvalidKnowledgeDocument as exc:
@@ -128,7 +126,7 @@ async def delete_knowledge_document(
     service: Annotated[KnowledgeDocumentService, Depends(get_knowledge_document_service)],
 ) -> Response:
     try:
-        await run_in_threadpool(service.delete, task_id)
+        await service.delete(task_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="文档不存在。") from exc
     except InvalidKnowledgeDocument as exc:
@@ -146,8 +144,7 @@ async def upload_knowledge_document(
     content = await file.read(service.max_upload_bytes + 1)
     await file.close()
     try:
-        job = await run_in_threadpool(
-            service.start_upload,
+        job = await service.start_upload(
             filename,
             content,
             file.content_type,

@@ -7,8 +7,8 @@ from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_chat_service, get_current_user
 from app.auth import AuthenticatedUser
+from app.chat import ChatService
 from app.schemas import ChatRequest, ChatResponse
-from app.services import ChatService
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 

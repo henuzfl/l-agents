@@ -64,6 +64,7 @@ async def test_chat_supports_fake_service_injection(client: httpx.AsyncClient) -
     assert response.json() == {
         "conversation_id": "conversation-001",
         "answer": "这是知识检索 Agent 的返回结果。",
+        "evidence": [],
     }
 
 

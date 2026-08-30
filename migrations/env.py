@@ -6,7 +6,7 @@ from sqlalchemy.schema import CreateSchema
 
 from app.core.config import Settings
 from app.database import APP_SCHEMA, sync_database_url
-from app.db_models import Base
+from app.db import Base
 
 config = context.config
 if config.config_file_name:
@@ -17,6 +17,16 @@ config.set_main_option("sqlalchemy.url", sync_database_url(settings).replace("%"
 target_metadata = Base.metadata
 
 
+def include_object(
+    _object: object,
+    name: str | None,
+    type_: str,
+    _reflected: bool,
+    _compare_to: object | None,
+) -> bool:
+    return not (type_ == "table" and name == "alembic_version")
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
@@ -24,7 +34,8 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         version_table_schema=APP_SCHEMA,
-        include_schemas=True,
+        include_schemas=False,
+        include_object=include_object,
     )
     context.execute(f'CREATE SCHEMA IF NOT EXISTS "{APP_SCHEMA}"')
     with context.begin_transaction():
@@ -43,7 +54,8 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             version_table_schema=APP_SCHEMA,
-            include_schemas=True,
+            include_schemas=False,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

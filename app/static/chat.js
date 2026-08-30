@@ -1,6 +1,8 @@
 "use strict";
 
 let STORAGE_KEY = "agent-desk-conversations";
+const evidenceImageCache = new Map();
+const evidenceBlobUrls = new Set();
 const state = {
   conversations: [],
   activeId: "",
@@ -42,6 +44,10 @@ function escapeHtml(value) {
   const node = document.createElement("div");
   node.textContent = value;
   return node.innerHTML;
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(String(value ?? "")).replace(/"/g, "&quot;");
 }
 
 function renderInlineMarkdown(value) {
@@ -180,11 +186,111 @@ function renderHistory() {
     </div>`).join("");
 }
 
+function evidenceTypeLabel(type) {
+  return ({ image: "图片", table: "表格", code: "代码", text: "正文" })[type] || "正文";
+}
+
+function evidenceLocation(item) {
+  const parts = [];
+  if (item.page_number != null) parts.push(`第 ${item.page_number} 页`);
+  if (item.section && item.section !== "上传文档") parts.push(item.section);
+  return parts.join(" · ");
+}
+
+function renderEvidenceTable(content) {
+  const rows = String(content || "").split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.includes("|"))
+    .map((line) => line.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
+  const separator = rows.findIndex((row) => row.every((cell) => /^:?-{2,}:?$/.test(cell)));
+  if (rows.length < 2 || separator < 0) {
+    return `<div class="evidence-copy">${renderMarkdown(String(content || ""))}</div>`;
+  }
+  const head = rows.slice(0, separator).at(-1) || [];
+  const body = rows.slice(separator + 1);
+  return `<div class="evidence-table-wrap"><table><thead><tr>${head.map((cell) => `<th>${renderInlineMarkdown(cell.replaceAll("<br>", " / "))}</th>`).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell.replaceAll("<br>", " / "))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderEvidenceCode(item) {
+  let content = String(item.content || "").trim();
+  content = content.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "");
+  const language = item.language ? `<span>${escapeHtml(item.language)}</span>` : "";
+  return `<div class="evidence-code">${language}<pre><code>${escapeHtml(content)}</code></pre></div>`;
+}
+
+function evidenceItemHtml(item, index) {
+  const type = item.element_type || "text";
+  const location = evidenceLocation(item);
+  let body = `<div class="evidence-copy">${renderMarkdown(String(item.content || ""))}</div>`;
+  if (type === "table") body = renderEvidenceTable(item.content);
+  if (type === "code") body = renderEvidenceCode(item);
+  if (type === "image" && item.asset_url) {
+    body = `<figure class="evidence-image">
+      <div class="evidence-image-frame loading">
+        <img alt="${escapeAttribute(item.content || `${item.source} 中的检索图片`)}" data-evidence-src="${escapeAttribute(item.asset_url)}">
+        <span>正在加载原文图片…</span>
+      </div>
+      ${item.content ? `<figcaption>${escapeHtml(item.content)}</figcaption>` : ""}
+    </figure>`;
+  }
+  return `<li class="evidence-item evidence-${escapeAttribute(type)}">
+    <span class="evidence-sequence">${index + 1}</span>
+    <article>
+      <header>
+        <div><strong>${escapeHtml(item.source || "未知文档")}</strong>${location ? `<small>${escapeHtml(location)}</small>` : ""}</div>
+        <span class="evidence-type">${evidenceTypeLabel(type)}</span>
+      </header>
+      ${body}
+    </article>
+  </li>`;
+}
+
+function evidenceHtml(items) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return `<section class="knowledge-evidence" aria-label="知识库检索依据">
+    <header class="evidence-heading">
+      <div><span>Source trail</span><h3>检索依据</h3></div>
+      <small>按原文顺序 · ${items.length} 个分片</small>
+    </header>
+    <ol class="evidence-list">${items.map(evidenceItemHtml).join("")}</ol>
+  </section>`;
+}
+
+async function loadEvidenceImage(assetUrl) {
+  if (!evidenceImageCache.has(assetUrl)) {
+    const pending = fetch(assetUrl).then(async (response) => {
+      if (!response.ok) throw new Error(`图片加载失败 (${response.status})`);
+      const objectUrl = URL.createObjectURL(await response.blob());
+      evidenceBlobUrls.add(objectUrl);
+      return objectUrl;
+    }).catch((error) => {
+      evidenceImageCache.delete(assetUrl);
+      throw error;
+    });
+    evidenceImageCache.set(assetUrl, pending);
+  }
+  return evidenceImageCache.get(assetUrl);
+}
+
+function hydrateEvidenceImages() {
+  elements.conversation.querySelectorAll("img[data-evidence-src]").forEach(async (image) => {
+    const frame = image.closest(".evidence-image-frame");
+    try {
+      image.src = await loadEvidenceImage(image.dataset.evidenceSrc);
+      frame?.classList.replace("loading", "loaded");
+    } catch {
+      frame?.classList.replace("loading", "failed");
+      const status = frame?.querySelector("span");
+      if (status) status.textContent = "图片加载失败";
+    }
+  });
+}
+
 function messageHtml(message) {
   const badge = message.role === "assistant" ? '<div class="assistant-badge"><i></i><i></i><i></i><i></i></div>' : "";
   const label = message.role === "assistant" ? "Manager" : "你";
   const content = message.role === "assistant"
-    ? `<div class="markdown-body">${renderMarkdown(message.content)}</div>`
+    ? `<div class="markdown-body">${renderMarkdown(message.content)}</div>${evidenceHtml(message.evidence)}`
     : `<p>${escapeHtml(message.content)}</p>`;
   return `<article class="message ${message.role}">${badge}<div class="message-body"><div class="message-label">${label}</div>${traceHtml(message)}${content}</div></article>`;
 }
@@ -196,7 +302,10 @@ function renderConversation() {
   } else {
     elements.conversation.innerHTML = `<div class="message-list">${conversation.messages.map(messageHtml).join("")}</div>`;
   }
-  requestAnimationFrame(() => elements.conversation.scrollTo({ top: elements.conversation.scrollHeight, behavior: "smooth" }));
+  requestAnimationFrame(() => {
+    hydrateEvidenceImages();
+    elements.conversation.scrollTo({ top: elements.conversation.scrollHeight, behavior: "smooth" });
+  });
 }
 
 function render() { renderHistory(); renderConversation(); }
@@ -257,6 +366,7 @@ function applyStreamEvent(message, eventName, payload) {
   }
   if (eventName === "done") {
     message.content = payload.answer || message.content;
+    message.evidence = Array.isArray(payload.evidence) ? payload.evidence : [];
     message.durationMs = payload.duration_ms || 0;
     message.traceStatus = "completed";
     message.traceOpen = false;
@@ -313,6 +423,7 @@ async function sendMessage(prefill) {
     traceOpen: true,
     durationMs: 0,
     startedAt: Date.now(),
+    evidence: [],
   };
   conversation.messages.push(assistant);
   const controller = new AbortController();
@@ -388,6 +499,9 @@ elements.conversation.addEventListener("toggle", (event) => {
 }, true);
 document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); createConversation(); }
+});
+window.addEventListener("beforeunload", () => {
+  evidenceBlobUrls.forEach((url) => URL.revokeObjectURL(url));
 });
 
 document.querySelector("[data-logout]").addEventListener("click", () => window.logout());

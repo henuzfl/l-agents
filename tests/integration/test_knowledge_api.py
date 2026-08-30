@@ -11,7 +11,9 @@ class FakeKnowledgeDocumentService:
     max_upload_bytes = 1024
     processed: list[str] = []
 
-    def start_upload(self, filename: str, content: bytes, _content_type: str) -> DocumentJob:
+    async def start_upload(
+        self, filename: str, content: bytes, _content_type: str
+    ) -> DocumentJob:
         assert content == "知识正文".encode()
         return DocumentJob(
             task_id="task-1",
@@ -26,16 +28,16 @@ class FakeKnowledgeDocumentService:
             updated_at="2026-08-26T00:00:00+00:00",
         )
 
-    def process(self, task_id: str) -> None:
+    async def process(self, task_id: str) -> None:
         self.processed.append(task_id)
 
-    def get_job(self, _task_id: str) -> DocumentJob:
-        return self.start_upload("manual.txt", "知识正文".encode(), "text/plain")
+    async def get_job(self, _task_id: str) -> DocumentJob:
+        return await self.start_upload("manual.txt", "知识正文".encode(), "text/plain")
 
-    def list_jobs(self) -> list[dict[str, object]]:
-        return [asdict(self.get_job("task-1"))]
+    async def list_jobs(self) -> list[dict[str, object]]:
+        return [asdict(await self.get_job("task-1"))]
 
-    def status(self) -> dict[str, int | str]:
+    async def status(self) -> dict[str, int | str]:
         return {
             "schema": "agent_knowledge",
             "table": "project_manual",
@@ -44,15 +46,17 @@ class FakeKnowledgeDocumentService:
             "embedding_dimensions": 1024,
         }
 
-    def download(self, _task_id: str) -> tuple[str, str, bytes]:
+    async def download(self, _task_id: str) -> tuple[str, str, bytes]:
         return "manual.txt", "text/plain", b"knowledge"
 
-    def download_asset(self, _task_id: str, node_id: str) -> tuple[str, str, bytes]:
+    async def download_asset(
+        self, _task_id: str, node_id: str
+    ) -> tuple[str, str, bytes]:
         if node_id != "node-1":
             raise KeyError(node_id)
         return "diagram.png", "image/png", b"image-content"
 
-    def list_chunks(self, task_id: str, **_filters: object) -> dict[str, object]:
+    async def list_chunks(self, task_id: str, **_filters: object) -> dict[str, object]:
         return {
             "task_id": task_id,
             "filename": "manual.txt",
@@ -77,10 +81,10 @@ class FakeKnowledgeDocumentService:
             ],
         }
 
-    def restart(self, task_id: str) -> DocumentJob:
-        return self.get_job(task_id)
+    async def restart(self, task_id: str) -> DocumentJob:
+        return await self.get_job(task_id)
 
-    def delete(self, _task_id: str) -> None:
+    async def delete(self, _task_id: str) -> None:
         return None
 
 

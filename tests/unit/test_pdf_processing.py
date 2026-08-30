@@ -35,6 +35,18 @@ def test_structured_markdown_preserves_table_and_code_blocks() -> None:
     assert elements[2].text == "print('ok')"
 
 
+def test_structured_markdown_unwraps_nested_pdf_code_fences() -> None:
+    elements = split_structured_markdown(
+        "Intro\n\n```\n   ```python\n   from pathlib import Path\n   print(Path.cwd())\n"
+        "   ```\n\n```\n\nOutro",
+        page_number=3,
+    )
+
+    assert [element.element_type for element in elements] == ["text", "code", "text"]
+    assert elements[1].language == "python"
+    assert elements[1].text == "from pathlib import Path\n   print(Path.cwd())"
+
+
 def test_blank_pdf_page_uses_vision_and_builds_typed_nodes() -> None:
     document = pymupdf.open()
     document.new_page()

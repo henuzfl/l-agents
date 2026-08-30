@@ -128,6 +128,30 @@ def split_structured_markdown(markdown: str, page_number: int) -> list[ParsedEle
             language = line.lstrip()[3:].strip() or "text"
             code_lines: list[str] = []
             index += 1
+            nested_language = (
+                lines[index].lstrip()[3:].strip()
+                if (
+                    language == "text"
+                    and index < len(lines)
+                    and lines[index].lstrip().startswith("```")
+                )
+                else ""
+            )
+            if nested_language:
+                language = nested_language
+                index += 1
+                while index < len(lines) and not lines[index].lstrip().startswith("```"):
+                    code_lines.append(lines[index])
+                    index += 1
+                code = "\n".join(code_lines).strip()
+                if code:
+                    elements.append(ParsedElement("code", page_number, code, language=language))
+                index += 1
+                while index < len(lines) and not lines[index].strip():
+                    index += 1
+                if index < len(lines) and lines[index].lstrip().startswith("```"):
+                    index += 1
+                continue
             while index < len(lines) and not lines[index].lstrip().startswith("```"):
                 code_lines.append(lines[index])
                 index += 1
