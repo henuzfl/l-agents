@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -27,7 +27,28 @@ class KnowledgeEvidence(BaseModel):
     download_url: str | None = None
 
 
+class MarkdownContentBlock(BaseModel):
+    type: Literal["markdown"] = "markdown"
+    content: str
+
+
+class ImageContentBlock(BaseModel):
+    type: Literal["image"] = "image"
+    node_id: str
+    asset_url: str
+    caption: str = ""
+    source: str
+    page_number: int | None = None
+
+
+AnswerContentBlock = Annotated[
+    MarkdownContentBlock | ImageContentBlock,
+    Field(discriminator="type"),
+]
+
+
 class ChatResponse(BaseModel):
     conversation_id: NonEmptyString
     answer: NonEmptyString
+    content_blocks: list[AnswerContentBlock] = Field(default_factory=list)
     evidence: list[KnowledgeEvidence] = Field(default_factory=list)

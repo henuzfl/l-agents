@@ -57,6 +57,58 @@ function renderInlineMarkdown(value) {
     .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 }
 
+function parseMarkdownTableRow(line) {
+  let value = String(line || "").trim();
+  if (!value.includes("|")) return null;
+  if (value.startsWith("|")) value = value.slice(1);
+  if (value.endsWith("|")) value = value.slice(0, -1);
+
+  const cells = [];
+  let cell = "";
+  let inCode = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\\" && value[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+      continue;
+    }
+    if (character === "`") inCode = !inCode;
+    if (character === "|" && !inCode) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells.length >= 2 ? cells : null;
+}
+
+function isMarkdownTableSeparator(cells) {
+  return Array.isArray(cells)
+    && cells.length >= 2
+    && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+}
+
+function markdownTableAlignment(separator) {
+  const value = separator.trim();
+  if (value.startsWith(":") && value.endsWith(":")) return "center";
+  if (value.endsWith(":")) return "right";
+  return "left";
+}
+
+function renderMarkdownTable(headers, separators, rows) {
+  const alignments = headers.map((_, index) => markdownTableAlignment(separators[index] || "---"));
+  const headerHtml = headers.map((cell, index) => (
+    `<th class="align-${alignments[index]}" scope="col">${renderInlineMarkdown(cell)}</th>`
+  )).join("");
+  const bodyHtml = rows.map((row) => `<tr>${headers.map((_, index) => (
+    `<td class="align-${alignments[index]}">${renderInlineMarkdown(row[index] || "")}</td>`
+  )).join("")}</tr>`).join("");
+  return `<div class="markdown-table-wrap"><table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`;
+}
+
 function renderMarkdown(value) {
   const lines = value.replace(/\r\n?/g, "\n").split("\n");
   const output = [];
@@ -82,7 +134,8 @@ function renderMarkdown(value) {
     }
   };
 
-  lines.forEach((line) => {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     if (/^\s*```/.test(line)) {
       closeParagraph();
       closeList();
@@ -91,31 +144,53 @@ function renderMarkdown(value) {
         code = [];
       }
       inCodeBlock = !inCodeBlock;
-      return;
+      continue;
     }
-    if (inCodeBlock) { code.push(line); return; }
+    if (inCodeBlock) { code.push(line); continue; }
+    const tableHeaders = parseMarkdownTableRow(line);
+    const tableSeparators = parseMarkdownTableRow(lines[lineIndex + 1]);
+    if (
+      tableHeaders
+      && tableSeparators
+      && tableHeaders.length === tableSeparators.length
+      && isMarkdownTableSeparator(tableSeparators)
+    ) {
+      closeParagraph();
+      closeList();
+      const rows = [];
+      let rowIndex = lineIndex + 2;
+      while (rowIndex < lines.length) {
+        const row = parseMarkdownTableRow(lines[rowIndex]);
+        if (!row) break;
+        rows.push(row);
+        rowIndex += 1;
+      }
+      output.push(renderMarkdownTable(tableHeaders, tableSeparators, rows));
+      lineIndex = rowIndex - 1;
+      continue;
+    }
     const heading = line.match(/^\s*(#{1,4})\s+(.+)$/);
     const unordered = line.match(/^\s*[-*]\s+(.+)$/);
     const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
     const quote = line.match(/^\s*>\s?(.+)$/);
-    if (!line.trim()) { closeParagraph(); closeList(); return; }
-    if (/^\s*---+\s*$/.test(line)) { closeParagraph(); closeList(); output.push("<hr>"); return; }
+    if (!line.trim()) { closeParagraph(); closeList(); continue; }
+    if (/^\s*---+\s*$/.test(line)) { closeParagraph(); closeList(); output.push("<hr>"); continue; }
     if (heading) {
       closeParagraph(); closeList();
       const level = Math.min(heading[1].length + 1, 5);
       output.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
-      return;
+      continue;
     }
-    if (unordered) { openList("ul"); output.push(`<li>${renderInlineMarkdown(unordered[1])}</li>`); return; }
-    if (ordered) { openList("ol"); output.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`); return; }
+    if (unordered) { openList("ul"); output.push(`<li>${renderInlineMarkdown(unordered[1])}</li>`); continue; }
+    if (ordered) { openList("ol"); output.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`); continue; }
     if (quote) {
       closeParagraph(); closeList();
       output.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
-      return;
+      continue;
     }
     closeList();
     paragraph.push(line.trim());
-  });
+  }
   closeParagraph();
   closeList();
   if (inCodeBlock && code.length) output.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
@@ -186,74 +261,56 @@ function renderHistory() {
     </div>`).join("");
 }
 
-function evidenceTypeLabel(type) {
-  return ({ image: "图片", table: "表格", code: "代码", text: "正文" })[type] || "正文";
-}
-
-function evidenceLocation(item) {
-  const parts = [];
-  if (item.page_number != null) parts.push(`第 ${item.page_number} 页`);
-  if (item.section && item.section !== "上传文档") parts.push(item.section);
-  return parts.join(" · ");
-}
-
-function renderEvidenceTable(content) {
-  const rows = String(content || "").split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.includes("|"))
-    .map((line) => line.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
-  const separator = rows.findIndex((row) => row.every((cell) => /^:?-{2,}:?$/.test(cell)));
-  if (rows.length < 2 || separator < 0) {
-    return `<div class="evidence-copy">${renderMarkdown(String(content || ""))}</div>`;
-  }
-  const head = rows.slice(0, separator).at(-1) || [];
-  const body = rows.slice(separator + 1);
-  return `<div class="evidence-table-wrap"><table><thead><tr>${head.map((cell) => `<th>${renderInlineMarkdown(cell.replaceAll("<br>", " / "))}</th>`).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell.replaceAll("<br>", " / "))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-}
-
-function renderEvidenceCode(item) {
-  let content = String(item.content || "").trim();
-  content = content.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "");
-  const language = item.language ? `<span>${escapeHtml(item.language)}</span>` : "";
-  return `<div class="evidence-code">${language}<pre><code>${escapeHtml(content)}</code></pre></div>`;
-}
-
-function evidenceItemHtml(item, index) {
-  const type = item.element_type || "text";
-  const location = evidenceLocation(item);
-  let body = `<div class="evidence-copy">${renderMarkdown(String(item.content || ""))}</div>`;
-  if (type === "table") body = renderEvidenceTable(item.content);
-  if (type === "code") body = renderEvidenceCode(item);
-  if (type === "image" && item.asset_url) {
-    body = `<figure class="evidence-image">
-      <div class="evidence-image-frame loading">
-        <img alt="${escapeAttribute(item.content || `${item.source} 中的检索图片`)}" data-evidence-src="${escapeAttribute(item.asset_url)}">
-        <span>正在加载原文图片…</span>
-      </div>
-      ${item.content ? `<figcaption>${escapeHtml(item.content)}</figcaption>` : ""}
-    </figure>`;
-  }
-  return `<li class="evidence-item evidence-${escapeAttribute(type)}">
-    <span class="evidence-sequence">${index + 1}</span>
-    <article>
-      <header>
-        <div><strong>${escapeHtml(item.source || "未知文档")}</strong>${location ? `<small>${escapeHtml(location)}</small>` : ""}</div>
-        <span class="evidence-type">${evidenceTypeLabel(type)}</span>
-      </header>
-      ${body}
-    </article>
-  </li>`;
-}
-
-function evidenceHtml(items) {
+function knowledgeSourcesHtml(items) {
   if (!Array.isArray(items) || !items.length) return "";
-  return `<section class="knowledge-evidence" aria-label="知识库检索依据">
-    <header class="evidence-heading">
-      <div><span>Source trail</span><h3>检索依据</h3></div>
-      <small>按原文顺序 · ${items.length} 个分片</small>
-    </header>
-    <ol class="evidence-list">${items.map(evidenceItemHtml).join("")}</ol>
+  const sources = new Map();
+  items.forEach((item) => {
+    const key = item.minio_object || item.source || "未知文档";
+    if (!sources.has(key)) {
+      sources.set(key, {name: item.source || "未知文档", pages: new Set()});
+    }
+    const pageNumber = Number(item.page_number);
+    if (Number.isInteger(pageNumber) && pageNumber > 0) {
+      sources.get(key).pages.add(pageNumber);
+    }
+  });
+  const rows = Array.from(sources.values()).map((source) => {
+    const pages = Array.from(source.pages).sort((left, right) => left - right);
+    const pageLabel = pages.length ? `（第${pages.join("、")}页）` : "";
+    return `<li><code>${escapeHtml(source.name)}</code>${pageLabel}</li>`;
+  }).join("");
+  return `<section class="knowledge-sources" aria-label="知识库来源引用">
+    <strong>知识库来源引用：</strong>
+    <ul>${rows}</ul>
   </section>`;
+}
+
+function inlineImageBlockHtml(block) {
+  const page = block.page_number == null ? "" : `第 ${block.page_number} 页`;
+  const source = [block.source, page].filter(Boolean).join(" · ");
+  return `<figure class="answer-inline-image">
+    <div class="evidence-image-frame loading">
+      <img alt="${escapeAttribute(block.caption || `${block.source} 中的图片`)}" data-evidence-src="${escapeAttribute(block.asset_url)}">
+      <span>正在加载原文图片…</span>
+    </div>
+    <figcaption>
+      ${block.caption ? `<p>${escapeHtml(block.caption)}</p>` : ""}
+      ${source ? `<small>来源：${escapeHtml(source)}</small>` : ""}
+    </figcaption>
+  </figure>`;
+}
+
+function answerContentHtml(message) {
+  if (!Array.isArray(message.contentBlocks) || !message.contentBlocks.length) {
+    return `<div class="markdown-body">${renderMarkdown(message.content)}</div>`;
+  }
+  return `<div class="answer-content">${message.contentBlocks.map((block) => {
+    if (block.type === "markdown") {
+      return `<div class="markdown-body answer-markdown-block">${renderMarkdown(block.content || "")}</div>`;
+    }
+    if (block.type === "image" && block.asset_url) return inlineImageBlockHtml(block);
+    return "";
+  }).join("")}</div>`;
 }
 
 async function loadEvidenceImage(assetUrl) {
@@ -290,7 +347,7 @@ function messageHtml(message) {
   const badge = message.role === "assistant" ? '<div class="assistant-badge"><i></i><i></i><i></i><i></i></div>' : "";
   const label = message.role === "assistant" ? "Manager" : "你";
   const content = message.role === "assistant"
-    ? `<div class="markdown-body">${renderMarkdown(message.content)}</div>${evidenceHtml(message.evidence)}`
+    ? `${answerContentHtml(message)}${knowledgeSourcesHtml(message.evidence)}`
     : `<p>${escapeHtml(message.content)}</p>`;
   return `<article class="message ${message.role}">${badge}<div class="message-body"><div class="message-label">${label}</div>${traceHtml(message)}${content}</div></article>`;
 }
@@ -366,6 +423,7 @@ function applyStreamEvent(message, eventName, payload) {
   }
   if (eventName === "done") {
     message.content = payload.answer || message.content;
+    message.contentBlocks = Array.isArray(payload.content_blocks) ? payload.content_blocks : [];
     message.evidence = Array.isArray(payload.evidence) ? payload.evidence : [];
     message.durationMs = payload.duration_ms || 0;
     message.traceStatus = "completed";
@@ -423,6 +481,7 @@ async function sendMessage(prefill) {
     traceOpen: true,
     durationMs: 0,
     startedAt: Date.now(),
+    contentBlocks: [],
     evidence: [],
   };
   conversation.messages.push(assistant);

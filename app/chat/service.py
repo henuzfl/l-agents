@@ -10,6 +10,7 @@ from uuid import uuid4
 from agents import Agent, RunConfig
 from agents.memory import Session
 
+from app.chat.content_blocks import build_answer_content
 from app.chat.runner import AgentRunner, StreamingRunResult
 from app.chat.stream_orchestrator import StreamOrchestrator
 from app.chat.trace_mapper import SafeTraceMapper
@@ -75,13 +76,16 @@ class ChatService:
         finally:
             reset_retrieval_evidence_sink(evidence_token)
 
-        answer = str(result.final_output or "").strip()
-        if not answer:
+        raw_answer = str(result.final_output or "").strip()
+        if not raw_answer:
             raise AgentExecutionError("The manager agent returned an empty response.")
+        evidence = KnowledgeSearchService.merge_evidence(evidence_items)
+        answer, content_blocks = build_answer_content(raw_answer, evidence)
         return ChatResponse(
             conversation_id=request.conversation_id,
             answer=answer,
-            evidence=KnowledgeSearchService.merge_evidence(evidence_items),
+            content_blocks=content_blocks,
+            evidence=evidence,
         )
 
     async def stream(self, request: ChatRequest, user_id: str) -> AsyncIterator[dict[str, Any]]:
@@ -103,6 +107,12 @@ class ChatService:
             yield initial
 
         result: StreamingRunResult | None = None
+        evidence_items: list[EvidenceItem] = []
+
+        async def receive_evidence(items: list[EvidenceItem]) -> None:
+            evidence_items.extend(items)
+
+        evidence_token = bind_retrieval_evidence_sink(receive_evidence)
         try:
             session = self._session_factory.create(user_id, request.conversation_id)
             run_config = await self._run_config(session, request.message)
@@ -119,7 +129,11 @@ class ChatService:
                     session=session,
                     run_config=run_config,
                 )
-            async for event in self._stream_orchestrator.stream(result, mapper):
+            async for event in self._stream_orchestrator.stream(
+                result,
+                mapper,
+                evidence_items,
+            ):
                 yield event
         except asyncio.CancelledError:
             if result is not None:
@@ -139,3 +153,5 @@ class ChatService:
                 "message": message,
                 "duration_ms": mapper.elapsed_ms(),
             }
+        finally:
+            reset_retrieval_evidence_sink(evidence_token)

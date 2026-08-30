@@ -132,3 +132,4 @@ async def test_search_reorders_selected_chunks_and_publishes_image_asset(tmp_pat
     assert received[-1]["asset_url"] == (
         f"/api/v1/knowledge/documents/{task_id}/chunks/image-node/asset"
     )
+    assert "图片引用标记: [[kb-image:image-node]]" in result

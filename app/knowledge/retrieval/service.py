@@ -160,7 +160,11 @@ class KnowledgeSearchService:
 
     @staticmethod
     def format_evidence(nodes: list[NodeWithScore]) -> str:
-        lines = ["知识库检索到以下证据（同一文档内已按原文顺序排列）："]
+        lines = [
+            "知识库检索到以下证据（同一文档内已按原文顺序排列）：",
+            "如果图片能直接帮助回答，请在相关段落后原样插入该图片的引用标记。",
+            "只能使用证据中明确提供的图片引用标记，不得自行构造节点 ID。",
+        ]
         for index, item in enumerate(nodes, start=1):
             source = str(item.node.metadata.get("source", "未知文档"))
             section = str(item.node.metadata.get("section", "未知章节"))
@@ -171,6 +175,8 @@ class KnowledgeSearchService:
             score = f"{item.score:.4f}" if item.score is not None else "unknown"
             content = item.node.get_content().strip()
             lines.extend([f"[{index}] [{location}] 相关度: {score}", content])
+            if element_type == "image":
+                lines.append(f"图片引用标记: [[kb-image:{item.node.node_id}]]")
         return "\n".join(lines)
 
 __all__ = ["KnowledgeSearchService", "NO_EVIDENCE_MESSAGE", "RetrieverLike"]

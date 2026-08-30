@@ -47,13 +47,13 @@ class FakeRunner:
                 }
             ]
         )
-        return FakeResult("这是知识检索 Agent 的返回结果。")
+        return FakeResult("这是知识检索 Agent 的返回结果。\n\n[[kb-image:node-1]]")
 
 
 class FakeStreamingResult:
     def __init__(self, agent: Agent[None]) -> None:
         self.current_agent = agent
-        self.final_output = "流式回答"
+        self.final_output = "流式回答前。\n\n[[kb-image:node-stream]]\n\n流式回答后。"
         self.cancelled = False
 
     async def stream_events(self):  # type: ignore[no-untyped-def]
@@ -135,6 +135,7 @@ async def test_chat_service_passes_session_only_to_manager_run(tmp_path: Path) -
     assert runner.session is not None
     assert runner.session.session_id == "user-001:conversation-001"
     assert response.answer == "这是知识检索 Agent 的返回结果。"
+    assert [block.type for block in response.content_blocks] == ["markdown", "image"]
     assert [item.node_id for item in response.evidence] == ["node-1"]
 
 
@@ -159,8 +160,13 @@ async def test_chat_service_streams_deltas_and_final_answer(tmp_path: Path) -> N
     assert runner.session is not None
     assert runner.session.session_id == "user-001:conversation-stream"
     deltas = "".join(event["text"] for event in events if event["type"] == "delta")
-    assert deltas == "流式回答"
+    assert deltas == "流式回答前。\n\n流式回答后。"
     assert "PRIVATE" not in str(events)
     assert events[-1]["type"] == "done"
-    assert events[-1]["answer"] == "流式回答"
+    assert events[-1]["answer"] == "流式回答前。\n\n流式回答后。"
+    assert [block["type"] for block in events[-1]["content_blocks"]] == [
+        "markdown",
+        "image",
+        "markdown",
+    ]
     assert [item["node_id"] for item in events[-1]["evidence"]] == ["node-stream"]

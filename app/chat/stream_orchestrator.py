@@ -4,15 +4,12 @@ from typing import Any
 
 from agents import AgentUpdatedStreamEvent
 
+from app.chat.content_blocks import build_answer_content
 from app.chat.execution_events import bind_nested_event_sink, reset_nested_event_sink
 from app.chat.runner import StreamingRunResult
 from app.chat.trace_mapper import SafeTraceMapper, chunk_answer
 from app.core.exceptions import AgentExecutionError
-from app.knowledge.retrieval.events import (
-    EvidenceItem,
-    bind_retrieval_evidence_sink,
-    reset_retrieval_evidence_sink,
-)
+from app.knowledge.retrieval.events import EvidenceItem
 from app.knowledge.retrieval.service import KnowledgeSearchService
 
 
@@ -21,18 +18,15 @@ class StreamOrchestrator:
         self,
         result: StreamingRunResult,
         mapper: SafeTraceMapper,
+        evidence_items: list[EvidenceItem] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         nested_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        evidence_items: list[EvidenceItem] = []
+        captured_evidence = evidence_items if evidence_items is not None else []
 
         async def receive_nested(payload: dict[str, Any]) -> None:
             await nested_queue.put(payload)
 
-        async def receive_evidence(items: list[EvidenceItem]) -> None:
-            evidence_items.extend(items)
-
         nested_token = bind_nested_event_sink(receive_nested)
-        evidence_token = bind_retrieval_evidence_sink(receive_evidence)
         pending: set[asyncio.Task[Any]] = set()
         try:
             outer_events = result.stream_events().__aiter__()
@@ -85,9 +79,11 @@ class StreamOrchestrator:
                 if trace is not None:
                     yield trace
 
-            answer = str(result.final_output or "").strip()
-            if not answer:
+            raw_answer = str(result.final_output or "").strip()
+            if not raw_answer:
                 raise AgentExecutionError("The manager agent returned an empty response.")
+            evidence = KnowledgeSearchService.merge_evidence(captured_evidence)
+            answer, content_blocks = build_answer_content(raw_answer, evidence)
             completed = mapper.trace(
                 label="Manager 已完成回答",
                 status="completed",
@@ -102,12 +98,12 @@ class StreamOrchestrator:
             yield {
                 "type": "done",
                 "answer": answer,
-                "evidence": KnowledgeSearchService.merge_evidence(evidence_items),
+                "content_blocks": content_blocks,
+                "evidence": evidence,
                 "duration_ms": mapper.elapsed_ms(),
                 "step_count": mapper.sequence,
             }
         finally:
-            reset_retrieval_evidence_sink(evidence_token)
             reset_nested_event_sink(nested_token)
             for task in pending:
                 if not task.done():
